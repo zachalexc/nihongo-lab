@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Japanese Study App</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* UI Lab Theme Overrides */
+        :root {
+            --bg-color: #121212;
+            --card-bg: #212124;
+            --text-color: #e0e0e0;
+            --text-muted: #a0a0a0;
+            --border-color: #333336;
+            --accent-color: #5c8aff;
+        }
+        body { background-color: var(--bg-color); color: var(--text-color); }
+        .panel { 
+            background: var(--card-bg); 
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 6rem; /* Prevents overlap with sticky footer */
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        }
+        .section-header h1 { font-size: 1.85rem; color: var(--text-color); font-weight: 800; letter-spacing: -0.025em; }
+        .subtitle { color: var(--text-muted); margin-top: 0.25rem; }
+        
+        /* Tighter Visual Hierarchy */
+        .settings-group { margin-bottom: 0.75rem; padding-bottom: 0.5rem; }
+        .settings-group h3 { font-size: 0.8rem; text-transform: uppercase; color: var(--text-color); display: flex; align-items: center; gap: 0.5rem; }
+        
+        /* Two-column Conjugation Grid */
+        .conjugation-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.25rem;
+            padding: 1rem;
+            background: #2a2a2d;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin: 1rem 0;
+        }
+
+        /* Sticky Action Bar */
+        .action-container {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: var(--bg-color);
+            border-top: 2px solid var(--border-color);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 3rem;
+            z-index: 1000;
+            box-shadow: 0 -4px 15px rgba(0,0,0,0.05);
+        }
+
+        /* Text-style Bulk Action Buttons */
+        .bulk-action-btn {
+            font-size: 0.65rem;
+            padding: 2px 6px;
+            background: #333336;
+            color: var(--text-muted);
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .bulk-action-btn:hover { background: #44444a; color: var(--text-color); }
+
+        /* Smooth Tab Transitions */
+        [id^="tab-"] {
+            transition: opacity 0.25s ease, transform 0.25s ease;
+        }
+        [id^="tab-"].hidden {
+            display: none;
+            opacity: 0;
+            transform: translateY(4px);
+        }
+        [id^="tab-"]:not(.hidden) {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <section id="settings-section" class="panel">
+            <header class="section-header">
+                <h1>Nihongo Study Lab</h1>
+                <p class="subtitle">Configure your session parameters.</p>
+            </header>
+
+            <div class="settings-group">
+                <h3>JLPT Level</h3>
+                <div class="checkbox-group">
+                    <label class="checkbox-label active-option">
+                        <input type="checkbox" id="jlpt-n5" data-jlpt-target="N5" checked>
+                        <span class="custom-checkbox"></span>
+                        N5
+                    </label>
+                    <label class="checkbox-label active-option">
+                        <input type="checkbox" id="jlpt-n4" data-jlpt-target="N4">
+                        <span class="custom-checkbox"></span>
+                        N4
+                    </label>
+                </div>
+            </div>
+
+            <div class="tabs-nav">
+                <button type="button" class="tab-btn active" data-tab="tab-verbs">Verbs</button>
+                <button type="button" class="tab-btn" data-tab="tab-adjectives">Adjectives</button>
+                <button type="button" class="tab-btn" data-tab="tab-nouns">Nouns</button>
+            </div>
+
+            <div id="tab-verbs">
+            <div class="settings-group">
+                <h3>Study Mode</h3>
+                <div class="checkbox-group">
+                    <label class="checkbox-label active-option">
+                        <input type="radio" name="verb-study-mode" value="translation" checked>
+                        <span class="custom-checkbox"></span>
+                        Translation
+                    </label>
+                    <label class="checkbox-label active-option">
+                        <input type="radio" name="verb-study-mode" value="conjugation">
+                        <span class="custom-checkbox"></span>
+                        Conjugation
+                    </label>
+                    <label class="checkbox-label active-option">
+                        <input type="radio" name="verb-study-mode" value="group">
+                        <span class="custom-checkbox"></span>
+                        Group Identification
+                    </label>
+                </div>
+            </div>
+
+            <div id="conjugation-settings-container" class="hidden">
+                <div class="conjugation-grid">
+                    <div class="settings-group">
+                        <h3>Given Form</h3>
+                        <div class="checkbox-grid">
+                            <label class="checkbox-label active-option">
+                                <input type="radio" name="given-form" value="base" data-given-form="base" checked>
+                                <span class="custom-checkbox"></span>
+                                Dictionary
+                            </label>
+                            <label class="checkbox-label active-option">
+                                <input type="radio" name="given-form" value="masu" data-given-form="masu">
+                                <span class="custom-checkbox"></span>
+                                Masu
+                            </label>
+                            <label class="checkbox-label active-option">
+                                <input type="radio" name="given-form" value="te" data-given-form="te">
+                                <span class="custom-checkbox"></span>
+                                Te
+                            </label>
+                            <label class="checkbox-label active-option">
+                                <input type="radio" name="given-form" value="ta" data-given-form="ta">
+                                <span class="custom-checkbox"></span>
+                                Ta
+                            </label>
+                            <label class="checkbox-label active-option">
+                                <input type="radio" name="given-form" value="nai" data-given-form="nai">
+                                <span class="custom-checkbox"></span>
+                                Nai
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="settings-group">
+                        <h3>Target Form</h3>
+                        <div class="checkbox-grid">
+                            <label class="checkbox-label active-option">
+                                <input type="radio" name="target-form" value="base" data-target-form="base">
+                                <span class="custom-checkbox"></span>
+                                Dictionary
+                            </label>
+                            <label class="checkbox-label active-option">
+                                <input type="radio" name="target-form" value="masu" data-target-form="masu" checked>
+                                <span class="custom-checkbox"></span>
+                                Masu
+                            </label>
+                            <label class="checkbox-label active-option">
+                                <input type="radio" name="target-form" value="te" data-target-form="te">
+                                <span class="custom-checkbox"></span>
+                                Te
+                            </label>
+                            <label class="checkbox-label active-option">
+                                <input type="radio" name="target-form" value="ta" data-target-form="ta">
+                                <span class="custom-checkbox"></span>
+                                Ta
+                            </label>
+                            <label class="checkbox-label active-option">
+                                <input type="radio" name="target-form" value="nai" data-target-form="nai">
+                                <span class="custom-checkbox"></span>
+                                Nai
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-group">
+                <h3>
+                    <span>Verb Groups</span>
+                    <div class="bulk-actions">
+                        <button type="button" class="bulk-action-btn" data-target-group="verb-groups" data-action="all">[All]</button>
+                        <button type="button" class="bulk-action-btn" data-target-group="verb-groups" data-action="none">[None]</button>
+                    </div>
+                </h3>
+                <div class="checkbox-group">
+                    <label class="checkbox-label active-option">
+                        <input type="checkbox" checked data-group-target="group1">
+                        <span class="custom-checkbox"></span>
+                        Group I
+                    </label>
+                    <label class="checkbox-label active-option">
+                        <input type="checkbox" checked data-group-target="group2">
+                        <span class="custom-checkbox"></span>
+                        Group II
+                    </label>
+                    <label class="checkbox-label active-option">
+                        <input type="checkbox" checked data-group-target="group3">
+                        <span class="custom-checkbox"></span>
+                        Group III
+                    </label>
+                </div>
+            </div>
+
+            <div class="settings-group">
+                <h3>
+                    <span>Verb Forms</span>
+                    <div class="bulk-actions">
+                        <button type="button" class="bulk-action-btn" data-target-group="verb-forms" data-action="all">[All]</button>
+                        <button type="button" class="bulk-action-btn" data-target-group="verb-forms" data-action="none">[None]</button>
+                    </div>
+                </h3>
+                <div class="checkbox-grid">
+                    <label class="checkbox-label active-option">
+                        <input type="checkbox" checked data-form-target="masu">
+                        <span class="custom-checkbox"></span>
+                        Masu
+                    </label>
+                    <label class="checkbox-label active-option">
+                        <input type="checkbox" checked data-form-target="base">
+                        <span class="custom-checkbox"></span>
+                        Dictionary
+                    </label>
+                    <label class="checkbox-label active-option">
+                        <input type="checkbox" checked data-form-target="te">
+                        <span class="custom-checkbox"></span>
+                        Te
+                    </label>
+                    <label class="checkbox-label active-option">
+                        <input type="checkbox" checked data-form-target="ta">
+                        <span class="custom-checkbox"></span>
+                        Ta
+                    </label>
+                    <label class="checkbox-label active-option">
+                        <input type="checkbox" checked data-form-target="nai">
+                        <span class="custom-checkbox"></span>
+                        Nai
+                    </label>
+                </div>
+            </div>
+
+            <details class="master-list-accordion">
+                <summary>Master Vocabulary List (Check to Exclude)</summary>
+                <div class="checkbox-grid" id="master-list-verbs"></div>
+            </details>
+            </div>
+
+            <div id="tab-adjectives" class="hidden">
+                <div class="settings-group">
+                    <h3>Adjective Groups</h3>
+                    <div class="checkbox-group">
+                        <label class="checkbox-label active-option">
+                            <input type="checkbox" checked data-adj-group="i-adj">
+                            <span class="custom-checkbox"></span>
+                            i-adj
+                        </label>
+                        <label class="checkbox-label active-option">
+                            <input type="checkbox" checked data-adj-group="na-adj">
+                            <span class="custom-checkbox"></span>
+                            na-adj
+                        </label>
+                    </div>
+                </div>
+
+                <div class="settings-group">
+                    <h3>Adjective Forms</h3>
+                    <div class="checkbox-grid">
+                        <label class="checkbox-label active-option">
+                            <input type="checkbox" checked data-adj-form="base">
+                            <span class="custom-checkbox"></span>
+                            Dictionary
+                        </label>
+                        <label class="checkbox-label active-option">
+                            <input type="checkbox" checked data-adj-form="negative">
+                            <span class="custom-checkbox"></span>
+                            Negative
+                        </label>
+                        <label class="checkbox-label active-option">
+                            <input type="checkbox" checked data-adj-form="past">
+                            <span class="custom-checkbox"></span>
+                            Past
+                        </label>
+                        <label class="checkbox-label active-option">
+                            <input type="checkbox" checked data-adj-form="pastNegative">
+                            <span class="custom-checkbox"></span>
+                            Past Negative
+                        </label>
+                        <label class="checkbox-label active-option">
+                            <input type="checkbox" checked data-adj-form="te">
+                            <span class="custom-checkbox"></span>
+                            Te-form
+                        </label>
+                    </div>
+                </div>
+
+                <details class="master-list-accordion">
+                    <summary>Master Vocabulary List (Check to Exclude)</summary>
+                    <div class="checkbox-grid" id="master-list-adjectives"></div>
+                </details>
+            </div>
+
+            <div id="tab-nouns" class="hidden">
+                <div class="settings-group">
+                    <h3>
+                        <span>Noun Groups</span>
+                        <div class="bulk-actions">
+                            <button type="button" class="bulk-action-btn" data-target-group="noun-groups" data-action="all">[All]</button>
+                            <button type="button" class="bulk-action-btn" data-target-group="noun-groups" data-action="none">[None]</button>
+                        </div>
+                    </h3>
+                    <div class="checkbox-grid">
+                        <label class="checkbox-label active-option">
+                            <input type="checkbox" checked data-noun-group="places_and_transport">
+                            <span class="custom-checkbox"></span>
+                            Places & Transport
+                        </label>
+                        <label class="checkbox-label active-option">
+                            <input type="checkbox" checked data-noun-group="people_and_family">
+                            <span class="custom-checkbox"></span>
+                            People & Family
+                        </label>
+                        <label class="checkbox-label active-option">
+                            <input type="checkbox" checked data-noun-group="food_and_drink">
+                            <span class="custom-checkbox"></span>
+                            Food & Drink
+                        </label>
+                        <label class="checkbox-label active-option">
+                            <input type="checkbox" checked data-noun-group="body_and_clothing">
+                            <span class="custom-checkbox"></span>
+                            Body & Clothing
+                        </label>
+                        <label class="checkbox-label active-option">
+                            <input type="checkbox" checked data-noun-group="nature_and_leisure">
+                            <span class="custom-checkbox"></span>
+                            Nature & Leisure
+                        </label>
+                        <label class="checkbox-label active-option">
+                            <input type="checkbox" checked data-noun-group="times_and_dates">
+                            <span class="custom-checkbox"></span>
+                            Times & Dates
+                        </label>
+                        <label class="checkbox-label active-option">
+                            <input type="checkbox" checked data-noun-group="numbers_and_counters">
+                            <span class="custom-checkbox"></span>
+                            Numbers & Counters
+                        </label>
+                        <label class="checkbox-label active-option">
+                            <input type="checkbox" checked data-noun-group="everyday_objects">
+                            <span class="custom-checkbox"></span>
+                            Everyday Objects
+                        </label>
+                        <label class="checkbox-label active-option">
+                            <input type="checkbox" checked data-noun-group="countries">
+                            <span class="custom-checkbox"></span>
+                            Countries
+                        </label>
+                        <label class="checkbox-label active-option">
+                            <input type="checkbox" checked data-noun-group="general_and_abstract">
+                            <span class="custom-checkbox"></span>
+                            General & Abstract
+                        </label>
+                    </div>
+                </div>
+
+                <details class="master-list-accordion">
+                    <summary>Master Vocabulary List (Check to Exclude)</summary>
+                    <div class="checkbox-grid" id="master-list-nouns"></div>
+                </details>
+            </div>
+
+            <div class="settings-group" id="subset-settings-group">
+                <h3>
+                    <span>Vocabulary Subsets (Sets of 10)</span>
+                    <div class="bulk-actions">
+                        <button type="button" class="bulk-action-btn" data-target-group="subsets" data-action="all">[All]</button>
+                        <button type="button" class="bulk-action-btn" data-target-group="subsets" data-action="none">[None]</button>
+                    </div>
+                </h3>
+                <div class="checkbox-group" id="subset-checkboxes-container"></div>
+            </div>
+
+            <div class="settings-group">
+                <h3>Audio Options</h3>
+                <div class="checkbox-group">
+                    <label class="checkbox-label active-option">
+                        <input type="checkbox" id="audio-toggle" checked>
+                        <span class="custom-checkbox"></span>
+                        Read Answer Aloud on Incorrect
+                    </label>
+                </div>
+            </div>
+
+            <div class="action-container">
+                <div id="live-estimator">Estimated Flashcards: <span>0</span></div>
+                
+                <button id="start-btn" class="btn btn-primary btn-large">Start Study Session</button>
+            </div>
+        </section>
+
+        <section id="study-section" class="hidden">
+            <div class="study-card">
+                <div class="session-counter">0 / 10</div>
+                <div class="study-content">
+                    <h2 class="prompt-text">Loading...</h2>
+                    
+                    <input type="text" id="answer-input" class="answer-input" placeholder="Type answer in romaji or kana..." autocomplete="off">
+                    
+                    <div id="group-buttons-container" class="hidden" style="display: flex; gap: 10px; justify-content: center; margin-top: 1rem;">
+                        <button class="btn btn-secondary group-btn" data-answer="group1">Group I</button>
+                        <button class="btn btn-secondary group-btn" data-answer="group2">Group II</button>
+                        <button class="btn btn-secondary group-btn" data-answer="group3">Group III</button>
+                    </div>
+                </div>
+                
+                <div class="study-actions" style="margin-top: 2rem;">
+                    <button id="submit-btn" class="btn btn-primary">Submit</button>
+                    <button id="reveal-btn" class="btn btn-secondary">Reveal / Skip</button>
+                    <button id="retake-btn" class="btn btn-primary hidden">Retake Session</button>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script src="https://unpkg.com/wanakana"></script>
+    <script src="data.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
