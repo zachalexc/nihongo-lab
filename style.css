@@ -331,6 +331,36 @@ h3 {
     outline: none;
 }
 
+/* Range Slider Styling */
+input[type="range"] {
+    -webkit-appearance: none;
+    height: 6px;
+    background: var(--border-color);
+    border-radius: 5px;
+    outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    background: var(--accent-color);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+}
+input[type="range"]::-webkit-slider-thumb:hover {
+    background: var(--accent-hover);
+    transform: scale(1.1);
+}
+input[type="range"]::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    background: var(--accent-color);
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
 .answer-input:focus {
     border-color: var(--accent-color);
 }

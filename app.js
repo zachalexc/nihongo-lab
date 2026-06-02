@@ -81,6 +81,13 @@ const UI = {
     tabVerbs: document.getElementById('tab-verbs'),
     tabAdjectives: document.getElementById('tab-adjectives'),
     tabNouns: document.getElementById('tab-nouns'),
+    tabSentences: document.getElementById('tab-sentences'),
+    jlptSettingsGroup: document.getElementById('jlpt-settings-group'),
+    audioSettingsGroup: document.getElementById('audio-settings-group'),
+    subsetSettingsGroup: document.getElementById('subset-settings-group'),
+    flashSettingsContainer: document.getElementById('flash-settings-container'),
+    flashSpeedSlider: document.getElementById('flash-speed-slider'),
+    flashSpeedNumber: document.getElementById('flash-speed-number'),
     
     groupChoiceBtns: document.querySelectorAll('.group-btn'),
     audioToggleCheckbox: document.getElementById('audio-toggle'),
@@ -116,6 +123,11 @@ function updateModeUI() {
         }
         UI.conjugationSettingsContainer.classList.toggle('hidden', !isConjugation);
     }
+
+    // Toggle Flash settings specifically for the Sentences category
+    if (UI.flashSettingsContainer) {
+        UI.flashSettingsContainer.classList.toggle('hidden', AppState.currentCategory !== 'sentence' || AppState.currentStudyMode !== 'flash');
+    }
 }
 
 /**
@@ -131,8 +143,14 @@ function switchTab(category) {
     });
 
     // Toggle visibility of content wrappers
-    [UI.tabVerbs, UI.tabAdjectives, UI.tabNouns].forEach(panel => {
-        panel.classList.toggle('hidden', panel.id !== targetId);
+    [UI.tabVerbs, UI.tabAdjectives, UI.tabNouns, UI.tabSentences].forEach(panel => {
+        if (panel) panel.classList.toggle('hidden', panel.id !== targetId);
+    });
+
+    // Toggle visibility of specific settings groups for the Sentences tab
+    const isSentence = category === 'sentence';
+    [UI.jlptSettingsGroup, UI.subsetSettingsGroup, UI.audioSettingsGroup].forEach(group => {
+        if (group) group.classList.toggle('hidden', isSentence);
     });
 
     // Refresh the UI state for the selected category
@@ -230,6 +248,11 @@ function renderMasterLists() {
 function renderSubsetCheckboxes() {
     if (!AppState.omniDatabase) return;
 
+    // Handle Sentences category transition
+    if (AppState.currentCategory === 'sentence') {
+        return;
+    }
+
     // Get filtering criteria configuration for the current tab
     const panelMap = {
         'verb': { panel: UI.tabVerbs, selector: '[data-group-target]', attr: 'groupTarget' },
@@ -300,6 +323,10 @@ function renderSubsetCheckboxes() {
 function getFilteredAndChunkedVocab() {
     if (!AppState.omniDatabase) return [];
 
+    if (AppState.currentCategory === 'sentence') {
+        return [];
+    }
+
     const panelMap = {
         'verb': { panel: UI.tabVerbs, selector: '[data-group-target]', attr: 'groupTarget' },
         'adjective': { panel: UI.tabAdjectives, selector: '[data-adj-group]', attr: 'adjGroup' },
@@ -346,6 +373,12 @@ function getFilteredAndChunkedVocab() {
 function updateLiveEstimator() {
     const isGroupActive = AppState.currentStudyMode === 'group' && AppState.currentCategory === 'verb';
     const filteredVocab = getFilteredAndChunkedVocab();
+
+    if (AppState.currentCategory === 'sentence') {
+        UI.estimatorText.innerHTML = `Estimated Flashcards: <span>0</span>`;
+        return;
+    }
+
     let estimatedCount = 0;
 
     if (isGroupActive) {
@@ -767,6 +800,19 @@ UI.settingsSection.addEventListener('change', (e) => {
         if (e.target.name === 'verb-study-mode') {
             AppState.currentStudyMode = e.target.value;
             updateModeUI();
+        }
+
+        // Handle Sentence Study Mode Radios
+        if (e.target.name === 'sentence-study-mode') {
+            AppState.currentStudyMode = e.target.value;
+            updateModeUI();
+        }
+
+        // Synchronize Flash Speed Multiplier Slider and Number Input
+        if (e.target.id === 'flash-speed-slider') {
+            UI.flashSpeedNumber.value = e.target.value;
+        } else if (e.target.id === 'flash-speed-number') {
+            UI.flashSpeedSlider.value = e.target.value;
         }
 
         // Handle Conjugation Form Radios Exclusivity
