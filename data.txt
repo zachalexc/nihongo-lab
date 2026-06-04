@@ -797,7 +797,7 @@
     "type": "verb",
     "subType": "group1",
     "isException": false,
-    "meaning": "to gain weight; to put on weight",
+    "meaning": "to grow fat",
     "tags": [],
     "base": {
       "kana": "ふとる",
@@ -1301,7 +1301,7 @@
     "type": "verb",
     "subType": "group1",
     "isException": false,
-    "meaning": "to pull, to catch (a cold)",
+    "meaning": "to pull, to catch (a cold), to play (instrument)",
     "tags": [],
     "base": {
       "kana": "ひく",
@@ -1331,42 +1331,6 @@
       }
     }
   },
-  {
-    "id": "hiku_instrument",
-    "jlptLevel": "N5",
-    "type": "verb",
-    "subType": "group1",
-    "isException": false,
-    "meaning": "to play (a stringed or keyboard instrument)",
-    "tags": [],
-    "base": {
-      "kana": "ひく",
-      "romaji": "hiku",
-      "kanji": "弾く"
-    },
-    "forms": {
-      "masu": {
-        "kana": "ひきます",
-        "romaji": "hikimasu",
-        "kanji": "弾きます"
-      },
-      "te": {
-        "kana": "ひいて",
-        "romaji": "hiite",
-        "kanji": "弾いて"
-      },
-      "ta": {
-        "kana": "ひいた",
-        "romaji": "hiita",
-        "kanji": "弾いた"
-      },
-      "nai": {
-        "kana": "ひかない",
-        "romaji": "hikanai",
-        "kanji": "弾かない"
-      }
-    }
-  }
   {
     "id": "homeru",
     "jlptLevel": "N4",
@@ -1589,7 +1553,7 @@
     "type": "verb",
     "subType": "group2",
     "isException": false,
-    "meaning": "to put in; to insert",
+    "meaning": "enter; put in",
     "tags": [],
     "base": {
       "kana": "いれる",
@@ -3219,7 +3183,7 @@
     "forms": {
       "masu": {
         "kana": "まけます",
-        "romaji": "makemasu",
+        "romaji": "akemasu",
         "kanji": "負けます"
       },
       "te": {
@@ -3578,7 +3542,7 @@
     },
     "forms": {
       "masu": {
-        "kana": "もどります",
+        "kana": "もどりまります",
         "romaji": "modorimasu",
         "kanji": "戻ります"
       },
@@ -13465,7 +13429,7 @@
   },
   {
     "id": "afurika",
-    "jlptLevel": "N5",
+    "jlptLevel": "N4",
     "type": "noun",
     "subType": "countries",
     "isException": false,
@@ -13513,7 +13477,7 @@
   },
   {
     "id": "ajia",
-    "jlptLevel": "N5",
+    "jlptLevel": "N4",
     "type": "noun",
     "subType": "countries",
     "isException": false,
@@ -13577,7 +13541,7 @@
   },
   {
     "id": "amerika",
-    "jlptLevel": "N5",
+    "jlptLevel": "N4",
     "type": "noun",
     "subType": "countries",
     "isException": false,
@@ -14459,11 +14423,11 @@
     "id": "ha",
     "jlptLevel": "N4",
     "type": "noun",
-    "subType": "nature_and_leisure",
+    "subType": "body_and_clothing",
     "isException": false,
     "meaning": "leaves; leaf",
     "tags": [
-      "nature_and_leisure"
+      "body_and_clothing"
     ],
     "base": {
       "kana": "は",
@@ -15883,9 +15847,9 @@
     "id": "kokoro",
     "jlptLevel": "N4",
     "type": "noun",
-    "subType": "general_and_abstract",
+    "subType": "body_and_clothing",
     "isException": false,
-    "meaning": "heart, mind, spirit, emotion",
+    "meaning": "heart",
     "tags": [
       "body_and_clothing"
     ],
@@ -16413,7 +16377,7 @@
     "type": "noun",
     "subType": "places_and_transport",
     "isException": false,
-    "meaning": "express train; express",
+    "meaning": "hurrying (to somewhere); rushing; hastening",
     "tags": [
       "places_and_transport"
     ],
@@ -19293,7 +19257,7 @@
     "type": "noun",
     "subType": "body_and_clothing",
     "isException": false,
-    "meaning": "foot; leg",
+    "meaning": "foot; leg; paw; arm",
     "tags": [
       "body_and_clothing"
     ],
@@ -21371,7 +21335,7 @@
     "id": "kami",
     "jlptLevel": "N5",
     "type": "noun",
-    "subType": "everyday_objects",
+    "subType": "body_and_clothing",
     "isException": false,
     "meaning": "paper",
     "tags": [
@@ -21647,7 +21611,7 @@
     "isException": false,
     "meaning": "tree; shrub; bush; wood; timber",
     "tags": [
-      "nature_and_leisure"
+      "general_and_abstract"
     ],
     "base": {
       "kana": "き",
@@ -22139,7 +22103,7 @@
     "id": "kuni",
     "jlptLevel": "N5",
     "type": "noun",
-    "subType": "places_and_transport",
+    "subType": "countries",
     "isException": false,
     "meaning": "country; state; region",
     "tags": [
@@ -22285,7 +22249,7 @@
     "type": "noun",
     "subType": "people_and_family",
     "isException": false,
-    "meaning": "siblings; brothers and sisters",
+    "meaning": "siblings; brothers and sisters; mate",
     "tags": [
       "people_and_family"
     ],
@@ -24347,11 +24311,11 @@
     "id": "shi",
     "jlptLevel": "N5",
     "type": "noun",
-    "subType": "numbers_and_counters",
+    "subType": "places_and_transport",
     "isException": false,
     "meaning": "four; 4",
     "tags": [
-      "numbers_and_counters"
+      "places_and_transport"
     ],
     "base": {
       "kana": "し",
@@ -24429,7 +24393,7 @@
     "type": "noun",
     "subType": "general_and_abstract",
     "isException": false,
-    "meaning": "white; innocence",
+    "meaning": "white; innocence; innocent person",
     "tags": [
       "general_and_abstract"
     ],
@@ -25309,7 +25273,7 @@
     "type": "noun",
     "subType": "places_and_transport",
     "isException": false,
-    "meaning": "greengrocer; fruit and vegetable shop",
+    "meaning": "greengrocer; fruit and vegetable shop; versatile",
     "tags": [
       "places_and_transport"
     ],
@@ -28728,618 +28692,6 @@
       "kana": "キャンプ",
       "romaji": "kyampu",
       "kanji": "キャンプ"
-    },
-    "forms": {}
-  },
-  {
-    "id": "mareesia",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Malaysia",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "マレーシア",
-      "romaji": "mare-shia",
-      "kanji": "マレーシア"
-    },
-    "forms": {}
-  },
-  {
-    "id": "arujeria",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Algeria",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "アルジェリア",
-      "romaji": "arujeria",
-      "kanji": "アルジェリア"
-    },
-    "forms": {}
-  },
-  {
-    "id": "kipurosu",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Cyprus",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "キプロス",
-      "romaji": "kipurosu",
-      "kanji": "キプロス"
-    },
-    "forms": {}
-  },
-  {
-    "id": "kirugisu",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Kyrgyzstan",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "キルギス",
-      "romaji": "kirugisu",
-      "kanji": "キルギス"
-    },
-    "forms": {}
-  },
-  {
-    "id": "naijeria",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Nigeria",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "ナイジェリア",
-      "romaji": "naijeria",
-      "kanji": "ナイジェリア"
-    },
-    "forms": {}
-  },
-  {
-    "id": "minamiafurika",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "South Africa",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "みなみアフリカ",
-      "romaji": "minamiafurika",
-      "kanji": "南アフリカ"
-    },
-    "forms": {}
-  },
-  {
-    "id": "bahama",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Bahamas",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "バハマ",
-      "romaji": "bahama",
-      "kanji": "バハマ"
-    },
-    "forms": {}
-  },
-  {
-    "id": "ejiputo",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Egypt",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "エジプト",
-      "romaji": "ejiputo",
-      "kanji": "エジプト"
-    },
-    "forms": {}
-  },
-  {
-    "id": "banguradeshu",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Bangladesh",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "バングラデシュ",
-      "romaji": "banguradeshu",
-      "kanji": "バングラデシュ"
-    },
-    "forms": {}
-  },
-  {
-    "id": "yooroppa",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Europe",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "ヨーロッパ",
-      "romaji": "yo-roppa",
-      "kanji": "ヨーロッパ"
-    },
-    "forms": {}
-  },
-  {
-    "id": "kitaamerika",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "North America",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "きたアメリカ",
-      "romaji": "kitaamerika",
-      "kanji": "北アメリカ"
-    },
-    "forms": {}
-  },
-  {
-    "id": "minamiamerika",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "South America",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "みなみアメリカ",
-      "romaji": "minamiamerika",
-      "kanji": "南アメリカ"
-    },
-    "forms": {}
-  },
-  {
-    "id": "oseania",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Oceania",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "オセアニア",
-      "romaji": "oseania",
-      "kanji": "オセアニア"
-    },
-    "forms": {}
-  },
-  {
-    "id": "nankyoku",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Antarctica",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "なんきょく",
-      "romaji": "nankyoku",
-      "kanji": "南極"
-    },
-    "forms": {}
-  },
-  {
-    "id": "nihon",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Japan",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "にほん",
-      "romaji": "nihon",
-      "kanji": "日本"
-    },
-    "forms": {}
-  },
-  {
-    "id": "chuugoku",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "China",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "ちゅうごく",
-      "romaji": "chuugoku",
-      "kanji": "中国"
-    },
-    "forms": {}
-  },
-  {
-    "id": "igirisu",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "United Kingdom / Britain",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "イギリス",
-      "romaji": "igirisu",
-      "kanji": "イギリス"
-    },
-    "forms": {}
-  },
-  {
-    "id": "doitsu",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Germany",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "ドイツ",
-      "romaji": "doitsu",
-      "kanji": "ドイツ"
-    },
-    "forms": {}
-  },
-  {
-    "id": "supein",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Spain",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "スペイン",
-      "romaji": "supein",
-      "kanji": "スペイン"
-    },
-    "forms": {}
-  },
-  {
-    "id": "oosutoraria",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Australia",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "オーストラリア",
-      "romaji": "o-sutoraria",
-      "kanji": "オーストラリア"
-    },
-    "forms": {}
-  },
-  {
-    "id": "kanada",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Canada",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "カナダ",
-      "romaji": "kanada",
-      "kanji": "カナダ"
-    },
-    "forms": {}
-  },
-  {
-    "id": "indo",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "India",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "インド",
-      "romaji": "indo",
-      "kanji": "インド"
-    },
-    "forms": {}
-  },
-  {
-    "id": "burajiru",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Brazil",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "ブラジル",
-      "romaji": "burajiru",
-      "kanji": "ブラジル"
-    },
-    "forms": {}
-  },
-  {
-    "id": "tai",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Thailand",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "タイ",
-      "romaji": "tai",
-      "kanji": "タイ"
-    },
-    "forms": {}
-  },
-  {
-    "id": "taiwan",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Taiwan",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "たいわん",
-      "romaji": "taiwan",
-      "kanji": "台湾"
-    },
-    "forms": {}
-  },
-  {
-    "id": "firipin",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Philippines",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "フィリピン",
-      "romaji": "firipin",
-      "kanji": "フィリピン"
-    },
-    "forms": {}
-  },
-  {
-    "id": "mekishiko",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Mexico",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "メキシコ",
-      "romaji": "mekishiko",
-      "kanji": "メキシコ"
-    },
-    "forms": {}
-  },
-  {
-    "id": "roshia",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Russia",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "ロシア",
-      "romaji": "roshia",
-      "kanji": "ロシア"
-    },
-    "forms": {}
-  },
-  {
-    "id": "indoneshia",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Indonesia",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "インドネシア",
-      "romaji": "indoneshia",
-      "kanji": "インドネシア"
-    },
-    "forms": {}
-  },
-  {
-    "id": "shingapo-ru",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Singapore",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "シンガポール",
-      "romaji": "shingapo-ru",
-      "kanji": "シンガポール"
-    },
-    "forms": {}
-  },
-  {
-    "id": "nyu-ji-rando",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "New Zealand",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "ニュージーランド",
-      "romaji": "nyu-ji-rando",
-      "kanji": "ニュージーランド"
-    },
-    "forms": {}
-  },
-  {
-    "id": "suisu",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Switzerland",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "スイス",
-      "romaji": "suisu",
-      "kanji": "スイス"
-    },
-    "forms": {}
-  },
-  {
-    "id": "oranda",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Netherlands",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "オランダ",
-      "romaji": "oranda",
-      "kanji": "オランダ"
-    },
-    "forms": {}
-  },
-  {
-    "id": "toruko",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Turkey",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "トルコ",
-      "romaji": "toruko",
-      "kanji": "トルコ"
-    },
-    "forms": {}
-  },
-  {
-    "id": "mongoru",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Mongolia",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "モンゴル",
-      "romaji": "mongoru",
-      "kanji": "モンゴル"
-    },
-    "forms": {}
-  },
-  {
-    "id": "suwe-den",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "countries",
-    "isException": false,
-    "meaning": "Sweden",
-    "tags": [
-      "countries"
-    ],
-    "base": {
-      "kana": "スウェーデン",
-      "romaji": "suwe-den",
-      "kanji": "スウェーデン"
     },
     "forms": {}
   }

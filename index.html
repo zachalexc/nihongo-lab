@@ -386,7 +386,7 @@
                         <label class="checkbox-label active-option">
                             <input type="checkbox" checked data-noun-group="countries">
                             <span class="custom-checkbox"></span>
-                            Countries
+                            Countries and Continents
                         </label>
                         <label class="checkbox-label active-option">
                             <input type="checkbox" checked data-noun-group="general_and_abstract">
@@ -443,20 +443,49 @@
                     <div class="settings-group">
                         <h3>Flash Speed Multiplier</h3>
                         <div style="display: flex; align-items: center; gap: 1.5rem; padding: 0.5rem 0;">
-                            <input type="range" id="flash-speed-slider" min="0.1" max="5" step="0.1" value="1" style="flex-grow: 1; cursor: pointer;">
-                            <input type="number" id="flash-speed-number" min="0.1" max="5" step="0.1" value="1" class="answer-input" style="width: 70px; text-align: center; padding: 0.5rem; font-size: 1rem;">
+                            <input type="range" id="flash-speed-slider" min="0.1" max="2.5" step="0.1" value="1" style="flex-grow: 1; cursor: pointer;">
+                            <input type="number" id="flash-speed-number" min="0.1" max="2.5" step="0.1" value="1" class="answer-input" style="width: 70px; text-align: center; padding: 0.5rem; font-size: 1rem;">
                         </div>
                     </div>
+                </div>
 
-                    <div class="settings-group">
-                        <h3>
-                            <span>Sentence Subsets</span>
-                            <div class="bulk-actions">
-                                <button type="button" class="bulk-action-btn" data-target-group="flash-subsets" data-action="all">[All]</button>
-                                <button type="button" class="bulk-action-btn" data-target-group="flash-subsets" data-action="none">[None]</button>
-                            </div>
-                        </h3>
-                        <div id="flash-subsets-container" class="checkbox-group"></div>
+                <div class="settings-group">
+                    <h3>Max Character Length (Kana)</h3>
+                    <div style="display: flex; align-items: center; gap: 1.5rem; padding: 0.5rem 0;">
+                        <input type="range" id="flash-length-slider" min="5" max="50" step="1" value="15" style="flex-grow: 1; cursor: pointer;">
+                        <input type="number" id="flash-length-number" min="5" max="50" step="1" value="15" class="answer-input" style="width: 70px; text-align: center; padding: 0.5rem; font-size: 1rem;">
+                    </div>
+                </div>
+                <details class="master-list-accordion">
+                    <summary>Mastered Subsets (Check to Exclude)</summary>
+                    <div class="checkbox-grid" id="master-list-sentences"></div>
+                </details>
+
+                <div class="settings-group" id="sentence-range-settings-group">
+                    <h3 style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>Subset Selection (1-103)</span>
+                        <div class="checkbox-group" style="gap: 1rem;">
+                            <label class="checkbox-label active-option" style="font-size: 0.85rem;">
+                                <input type="radio" name="subset-mode" value="single" checked>
+                                <span class="custom-checkbox" style="width: 14px; height: 14px;"></span>
+                                Single
+                            </label>
+                            <label class="checkbox-label active-option" style="font-size: 0.85rem;">
+                                <input type="radio" name="subset-mode" value="range">
+                                <span class="custom-checkbox" style="width: 14px; height: 14px;"></span>
+                                Range
+                            </label>
+                        </div>
+                    </h3>
+                    <div style="display: flex; align-items: center; gap: 1rem; padding: 0.5rem 0;">
+                        <input type="number" id="sentence-subset-start" min="1" max="110" placeholder="Subset (1-110)" class="answer-input" style="flex: 1; text-align: center; padding: 0.5rem; font-size: 1rem;">
+                        <div id="sentence-subset-end-wrapper" class="hidden" style="display: flex; align-items: center; gap: 1rem; flex: 1;">
+                            <span style="color: var(--text-secondary); font-weight: 600;">to</span>
+                            <input type="number" id="sentence-subset-end" min="1" max="110" placeholder="End Subset" class="answer-input" style="width: 100%; text-align: center; padding: 0.5rem; font-size: 1rem;">
+                        </div>
+                    </div>
+                    <div id="sentence-history-indicator" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                        Recently studied: None
                     </div>
                 </div>
             </div>
@@ -491,6 +520,7 @@
 
         <section id="study-section" class="hidden">
             <div class="study-card">
+                <button id="close-session-btn" class="close-btn" title="Back to Settings">&times;</button>
                 <div class="session-counter">0 / 10</div>
                 <div class="study-content">
                     <h2 class="prompt-text">Loading...</h2>
@@ -506,7 +536,7 @@
                 
                 <div class="study-actions" style="margin-top: 2rem;">
                     <button id="submit-btn" class="btn btn-primary">Submit</button>
-                    <button id="reveal-btn" class="btn btn-secondary">Reveal / Skip</button>
+                    <button id="reveal-btn" class="btn btn-secondary">Reveal</button>
                     <button id="retake-btn" class="btn btn-primary hidden">Retake Session</button>
                 </div>
             </div>

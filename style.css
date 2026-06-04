@@ -22,12 +22,17 @@
     padding: 0;
 }
 
+html, body {
+    overscroll-behavior-y: none; /* Prevents mobile pull-to-refresh bounce */
+}
+
 body {
     font-family: var(--font-main);
     background-color: var(--bg-base);
     color: var(--text-primary);
     line-height: 1.6;
     min-height: 100vh;
+    min-height: 100dvh; /* Accounts for dynamic mobile UI bars */
     display: flex;
     justify-content: center;
     padding: 2rem 1rem;
@@ -206,13 +211,18 @@ h3 {
     content: "";
     position: absolute;
     display: none;
-    left: 6px;
-    top: 2px;
-    width: 4px;
-    height: 10px;
+    
+    /* Responsive sizing so it scales with 20px or 14px boxes */
+    width: 25%;
+    height: 50%;
+    
+    /* Mathematical centering */
+    left: 50%;
+    top: 45%; /* Slightly above 50% looks optically best for a checkmark */
+    transform: translate(-50%, -50%) rotate(45deg);
+    
     border: solid white;
     border-width: 0 2px 2px 0;
-    transform: rotate(45deg);
 }
 
 .checkbox-label input:checked ~ .custom-checkbox:after {
@@ -381,6 +391,27 @@ input[type="range"]::-moz-range-thumb {
     max-width: 200px;
 }
 
+.close-btn {
+    position: absolute;
+    top: 1.5rem;
+    left: 1.5rem;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 2rem;
+    cursor: pointer;
+    line-height: 1;
+    transition: all 0.2s ease;
+    padding: 0 0.5rem;
+    border-radius: 8px;
+}
+
+.close-btn:hover {
+    color: var(--error-color);
+    transform: scale(1.1);
+    background-color: rgba(239, 68, 68, 0.1);
+}
+
 /* --- Live Estimator Styles --- */
 #live-estimator {
     background-color: rgba(92, 138, 255, 0.1); /* Subtle accent background */
@@ -422,19 +453,25 @@ input[type="range"]::-moz-range-thumb {
     body { padding: 1rem 0.5rem; }
     .panel, .study-card { padding: 1.5rem 1rem; }
 
-    /* 2. Touch Targets: Ensure all tappable items are at least 44px tall */
+    /* 2.Anchor study card to top to prevent keyboard layout jumps */
+    #study-section {
+        align-items: flex-start;
+        padding-top: 1rem; 
+    }
+
+    /* 3. Touch Targets: Ensure all tappable items are at least 44px tall */
     .btn, .tab-btn, .bulk-action-btn, .checkbox-label {
         min-height: 44px;
     }
 
-    /* 3. Wrap tabs so they don't flow off the screen horizontally */
+    /* 4. Wrap tabs so they don't flow off the screen horizontally */
     .tabs-nav {
         gap: 0.5rem 1rem;
         flex-wrap: wrap;
         justify-content: center;
     }
 
-    /* 4. Stack study action buttons vertically for easier thumb tapping */
+    /* 5. Stack study action buttons vertically for easier thumb tapping */
     .study-actions {
         flex-direction: column;
     }
@@ -457,4 +494,68 @@ input[type="range"]::-moz-range-thumb {
         font-size: 0.75rem;
         padding: 0.3rem 0.6rem;
     }
+}
+
+/* --- Word Hover Tooltips --- */
+.prompt-text span.hover-word {
+    position: relative;
+    cursor: help;
+    display: inline-block;
+    margin-top: 0;
+    font-weight: inherit;
+    color: inherit;
+    border-bottom: 2px dotted transparent;
+    transition: border-color 0.2s;
+}
+
+/* Only show the dotted line if a translation actually exists */
+.hover-word[data-translation]:not([data-translation=""]) {
+    border-bottom-color: rgba(92, 138, 255, 0.4); /* subtle accent color underline */
+}
+
+.hover-word[data-translation]:not([data-translation=""]):hover {
+    border-bottom-color: var(--accent-color);
+}
+
+.hover-word[data-translation]::after {
+    content: attr(data-translation);
+    position: absolute;
+    bottom: 110%;
+    left: 50%;
+    transform: translateX(-50%) translateY(5px);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    padding: 0.4rem 0.8rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    z-index: 100;
+}
+
+/* Add a little triangle arrow to the bottom of the tooltip */
+.hover-word[data-translation]::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%) translateY(5px);
+    border-width: 6px;
+    border-style: solid;
+    border-color: var(--border-color) transparent transparent transparent;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.2s ease;
+    z-index: 101;
+}
+
+.hover-word[data-translation]:not([data-translation=""]):hover::after,
+.hover-word[data-translation]:not([data-translation=""]):hover::before {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
 }
