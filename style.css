@@ -471,14 +471,17 @@ input[type="range"]::-moz-range-thumb {
         justify-content: center;
     }
 
-    /* 5. Stack study action buttons vertically for easier thumb tapping */
+    /* 4. Keep action buttons side-by-side to save vertical height */
     .study-actions {
-        flex-direction: column;
+        flex-direction: row;
+        gap: 0.5rem;
     }
     
     .study-actions .btn {
         max-width: 100%;
-        width: 100%;
+        width: 50%;
+        padding: 0.75rem 0.5rem; /* Slightly tighter padding */
+        font-size: 0.95rem; /* Prevent text overflow on small screens */
     }
 
     /* 5. Scale down the input field slightly to prevent zooming issues */
@@ -493,6 +496,17 @@ input[type="range"]::-moz-range-thumb {
         right: 0.5rem;
         font-size: 0.75rem;
         padding: 0.3rem 0.6rem;
+    }
+
+    /* Squeeze excessive vertical spacing */
+    .study-content {
+        margin: 1rem 0; 
+    }
+    .prompt-text {
+        margin-bottom: 1rem;
+    }
+    .study-actions {
+        margin-top: 1rem;
     }
 }
 
