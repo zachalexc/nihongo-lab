@@ -5,7 +5,7 @@
     "type": "verb",
     "subType": "group2",
     "isException": false,
-    "meaning": "give",
+    "meaning": "to give (outward: to someone else of equal or lower status)",
     "tags": [],
     "base": {
       "kana": "あげる",
@@ -41,7 +41,7 @@
     "type": "verb",
     "subType": "group2",
     "isException": false,
-    "meaning": "to open",
+    "meaning": "to open (something, e.g., someone opens a door)",
     "tags": [],
     "base": {
       "kana": "あける",
@@ -77,7 +77,7 @@
     "type": "verb",
     "subType": "group1",
     "isException": false,
-    "meaning": "to open, to become empty",
+    "meaning": "(something) opens / to become empty (e.g., a door opens)",
     "tags": [],
     "base": {
       "kana": "あく",
@@ -149,7 +149,7 @@
     "type": "verb",
     "subType": "group1",
     "isException": false,
-    "meaning": "be (thing)",
+    "meaning": "to be / exist (inanimate objects, plants)",
     "tags": [],
     "base": {
       "kana": "ある",
@@ -221,7 +221,7 @@
     "type": "verb",
     "subType": "group1",
     "isException": false,
-    "meaning": "to play",
+    "meaning": "to play (to have fun, hang out, recreate)",
     "tags": [],
     "base": {
       "kana": "あそぶ",
@@ -257,7 +257,7 @@
     "type": "verb",
     "subType": "group1",
     "isException": false,
-    "meaning": "to gather (intransitive)",
+    "meaning": "(people or things) gather / come together",
     "tags": [],
     "base": {
       "kana": "あつまる",
@@ -293,7 +293,7 @@
     "type": "verb",
     "subType": "group2",
     "isException": false,
-    "meaning": "to collect (transitive)",
+    "meaning": "to collect / gather (something)",
     "tags": [],
     "base": {
       "kana": "あつめる",
@@ -761,7 +761,7 @@
     "type": "verb",
     "subType": "group1",
     "isException": false,
-    "meaning": "to fall (rain, snow)",
+    "meaning": "to fall (precipitation from the sky, like rain or snow)",
     "tags": [],
     "base": {
       "kana": "ふる",
@@ -905,7 +905,7 @@
     "type": "verb",
     "subType": "group1",
     "isException": false,
-    "meaning": "to begin, to start (intransitive)",
+    "meaning": "(something) begins / starts",
     "tags": [],
     "base": {
       "kana": "はじまる",
@@ -941,7 +941,7 @@
     "type": "verb",
     "subType": "group2",
     "isException": false,
-    "meaning": "to begin, to start (transitive)",
+    "meaning": "to begin / start (something)",
     "tags": [],
     "base": {
       "kana": "はじめる",
@@ -1193,7 +1193,7 @@
     "type": "verb",
     "subType": "group2",
     "isException": false,
-    "meaning": "to grow cold",
+    "meaning": "to get cold / chill (for bodies or objects)",
     "tags": [],
     "base": {
       "kana": "ひえる",
@@ -1337,7 +1337,7 @@
     "type": "verb",
     "subType": "group1",
     "isException": false,
-    "meaning": "to play (a stringed or keyboard instrument)",
+    "meaning": "to play (a musical instrument, specifically stringed/keyboard)",
     "tags": [],
     "base": {
       "kana": "ひく",
@@ -1553,7 +1553,7 @@
     "type": "verb",
     "subType": "group1",
     "isException": true,
-    "meaning": "to be, to go, to come (respectful)",
+    "meaning": "to be / go / come (respectful, used for someone else)",
     "tags": [],
     "base": {
       "kana": "いらっしゃる",
@@ -1625,7 +1625,7 @@
     "type": "verb",
     "subType": "group2",
     "isException": false,
-    "meaning": "be (person, animal)",
+    "meaning": "to be / exist (living, moving things)",
     "tags": [],
     "base": {
       "kana": "いる",
@@ -1769,7 +1769,7 @@
     "type": "verb",
     "subType": "group1",
     "isException": false,
-    "meaning": "say",
+    "meaning": "to say (neutral/standard)",
     "tags": [],
     "base": {
       "kana": "いう",
@@ -1805,7 +1805,7 @@
     "type": "verb",
     "subType": "group1",
     "isException": true,
-    "meaning": "return",
+    "meaning": "to return (home / to one's base)",
     "tags": [],
     "base": {
       "kana": "かえる",
@@ -1841,7 +1841,7 @@
     "type": "verb",
     "subType": "group2",
     "isException": false,
-    "meaning": "to change (transitive)",
+    "meaning": "to change (something)",
     "tags": [],
     "base": {
       "kana": "かえる",
@@ -2309,7 +2309,7 @@
     "type": "verb",
     "subType": "group1",
     "isException": false,
-    "meaning": "to change (intransitive)",
+    "meaning": "(something) changes",
     "tags": [],
     "base": {
       "kana": "かわる",
@@ -2849,7 +2849,7 @@
     "type": "verb",
     "subType": "group2",
     "isException": false,
-    "meaning": "to break (intransitive)",
+    "meaning": "to break / be destroyed (an object or machine)",
     "tags": [],
     "base": {
       "kana": "こわれる",
@@ -2885,7 +2885,7 @@
     "type": "verb",
     "subType": "group1",
     "isException": false,
-    "meaning": "to break (transitive)",
+    "meaning": "to break / destroy (an object or machine)",
     "tags": [],
     "base": {
       "kana": "こわす",
@@ -3029,7 +3029,7 @@
     "type": "verb",
     "subType": "group2",
     "isException": false,
-    "meaning": "to give (to me)",
+    "meaning": "to give (inward: someone else gives to me or my in-group)",
     "tags": [],
     "base": {
       "kana": "くれる",
@@ -3569,7 +3569,7 @@
     "type": "verb",
     "subType": "group1",
     "isException": false,
-    "meaning": "to return, to turn back",
+    "meaning": "to return (to a previous location or state)",
     "tags": [],
     "base": {
       "kana": "もどる",
@@ -3713,7 +3713,7 @@
     "type": "verb",
     "subType": "group2",
     "isException": false,
-    "meaning": "to say (humble)",
+    "meaning": "to say (humble, referring to one's own speech)",
     "tags": [],
     "base": {
       "kana": "もうしあげます",
@@ -3749,7 +3749,7 @@
     "type": "verb",
     "subType": "group1",
     "isException": false,
-    "meaning": "to say (humble)",
+    "meaning": "to say (humble, referring to one's own speech)",
     "tags": [],
     "base": {
       "kana": "もうす",
@@ -3893,7 +3893,7 @@
     "type": "verb",
     "subType": "group2",
     "isException": false,
-    "meaning": "to set up, to arrange (transitive)",
+    "meaning": "to set up / arrange (something)",
     "tags": [],
     "base": {
       "kana": "ならべる",
@@ -3929,7 +3929,7 @@
     "type": "verb",
     "subType": "group1",
     "isException": false,
-    "meaning": "to line up (intransitive)",
+    "meaning": "(someone/something) lines up",
     "tags": [],
     "base": {
       "kana": "ならぶ",
@@ -4469,7 +4469,7 @@
     "type": "verb",
     "subType": "group2",
     "isException": false,
-    "meaning": "to fall",
+    "meaning": "to fall / drop (downward from a height, like an apple from a tree)",
     "tags": [],
     "base": {
       "kana": "おちる",
@@ -4577,7 +4577,7 @@
     "type": "verb",
     "subType": "group1",
     "isException": false,
-    "meaning": "to be, to come (respectful)",
+    "meaning": "to be / come (highly respectful, used for someone else)",
     "tags": [],
     "base": {
       "kana": "おいでになる",
@@ -4901,7 +4901,7 @@
     "type": "verb",
     "subType": "group2",
     "isException": false,
-    "meaning": "to break, to be folded (intransitive)",
+    "meaning": "to break / be snapped / folded (like a stick or bone)",
     "tags": [],
     "base": {
       "kana": "おれる",
@@ -4973,7 +4973,7 @@
     "type": "verb",
     "subType": "group1",
     "isException": false,
-    "meaning": "to fold, to break (transitive)",
+    "meaning": "to break / snap / fold (like a stick or bone)",
     "tags": [],
     "base": {
       "kana": "おる",
@@ -5009,7 +5009,7 @@
     "type": "verb",
     "subType": "group1",
     "isException": false,
-    "meaning": "to be (humble)",
+    "meaning": "to be / exist (humble, used for oneself or one's in-group)",
     "tags": [],
     "base": {
       "kana": "おる",
@@ -5081,7 +5081,7 @@
     "type": "verb",
     "subType": "group1",
     "isException": true,
-    "meaning": "to say (respectful)",
+    "meaning": "to say (respectful, referring to someone else's speech)",
     "tags": [],
     "base": {
       "kana": "おっしゃる",
@@ -5513,7 +5513,7 @@
     "type": "verb",
     "subType": "group2",
     "isException": false,
-    "meaning": "to give (humble)",
+    "meaning": "to give (humble: outward to a person of higher status)",
     "tags": [],
     "base": {
       "kana": "さしあげる",
@@ -5765,7 +5765,7 @@
     "type": "verb",
     "subType": "group1",
     "isException": false,
-    "meaning": "to close (intransitive)",
+    "meaning": "(something) closes (e.g., a window closes)",
     "tags": [],
     "base": {
       "kana": "しまる",
@@ -5801,7 +5801,7 @@
     "type": "verb",
     "subType": "group2",
     "isException": false,
-    "meaning": "to close (transitive)",
+    "meaning": "to close (something, e.g., someone closes a window)",
     "tags": [],
     "base": {
       "kana": "しめる",
@@ -6521,7 +6521,7 @@
     "type": "verb",
     "subType": "group2",
     "isException": false,
-    "meaning": "to fall down",
+    "meaning": "to fall over / collapse (e.g., a standing person or building tipping over)",
     "tags": [],
     "base": {
       "kana": "たおれる",
@@ -6917,7 +6917,7 @@
     "type": "verb",
     "subType": "group2",
     "isException": false,
-    "meaning": "to continue (transitive)",
+    "meaning": "to continue (something)",
     "tags": [],
     "base": {
       "kana": "つづける",
@@ -6953,7 +6953,7 @@
     "type": "verb",
     "subType": "group1",
     "isException": false,
-    "meaning": "to continue (intransitive)",
+    "meaning": "(something) continues",
     "tags": [],
     "base": {
       "kana": "つづく",
@@ -7709,7 +7709,7 @@
     "type": "verb",
     "subType": "group1",
     "isException": false,
-    "meaning": "to boil, to heat",
+    "meaning": "to boil / heat (something, e.g., to boil water)",
     "tags": [],
     "base": {
       "kana": "わかす",
@@ -7745,7 +7745,7 @@
     "type": "verb",
     "subType": "group1",
     "isException": false,
-    "meaning": "to boil, to grow hot",
+    "meaning": "(something) boils / grows hot (e.g., the water boils)",
     "tags": [],
     "base": {
       "kana": "わく",
@@ -7817,7 +7817,7 @@
     "type": "verb",
     "subType": "group2",
     "isException": false,
-    "meaning": "to break, to split",
+    "meaning": "to break / be smashed / split (like glass)",
     "tags": [],
     "base": {
       "kana": "われる",
@@ -7853,7 +7853,7 @@
     "type": "verb",
     "subType": "group1",
     "isException": false,
-    "meaning": "to break, to divide",
+    "meaning": "to break / smash / split (like glass)",
     "tags": [],
     "base": {
       "kana": "わる",
@@ -8573,7 +8573,7 @@
     "type": "adjective",
     "subType": "i-adj",
     "isException": false,
-    "meaning": "red; crimson; scarlet",
+    "meaning": "red; crimson; scarlet (adjective)",
     "tags": [],
     "base": {
       "kana": "あかい",
@@ -8681,7 +8681,7 @@
     "type": "adjective",
     "subType": "i-adj",
     "isException": false,
-    "meaning": "blue; azure",
+    "meaning": "blue; azure (adjective)",
     "tags": [],
     "base": {
       "kana": "あおい",
@@ -8789,7 +8789,7 @@
     "type": "adjective",
     "subType": "i-adj",
     "isException": false,
-    "meaning": "hot",
+    "meaning": "hot (to the touch, for objects)",
     "tags": [],
     "base": {
       "kana": "あつい",
@@ -8821,11 +8821,11 @@
   },
   {
     "id": "atsui_2",
-    "jlptLevel": "N5",
+    "jlptLevel": "N4",
     "type": "adjective",
     "subType": "i-adj",
     "isException": false,
-    "meaning": "thick",
+    "meaning": "thick (for flat objects like books, paper, or walls)",
     "tags": [],
     "base": {
       "kana": "あつい",
@@ -8861,7 +8861,7 @@
     "type": "adjective",
     "subType": "i-adj",
     "isException": false,
-    "meaning": "hot; sultry",
+    "meaning": "hot (weather/climate)",
     "tags": [],
     "base": {
       "kana": "あつい",
@@ -9113,7 +9113,7 @@
     "type": "adjective",
     "subType": "i-adj",
     "isException": false,
-    "meaning": "fat; thick",
+    "meaning": "thick / fat (for cylindrical objects like pens, branches, or legs)",
     "tags": [],
     "base": {
       "kana": "ふとい",
@@ -9185,7 +9185,7 @@
     "type": "adjective",
     "subType": "i-adj",
     "isException": false,
-    "meaning": "fast; quick; hasty; brisk",
+    "meaning": "fast; quick (speed)",
     "tags": [],
     "base": {
       "kana": "はやい",
@@ -9221,7 +9221,7 @@
     "type": "adjective",
     "subType": "i-adj",
     "isException": false,
-    "meaning": "fast; early",
+    "meaning": "early; fast (time)",
     "tags": [],
     "base": {
       "kana": "はやい",
@@ -9293,7 +9293,7 @@
     "type": "adjective",
     "subType": "i-adj",
     "isException": false,
-    "meaning": "short,low",
+    "meaning": "short (height); low",
     "tags": [],
     "base": {
       "kana": "ひくい",
@@ -9941,7 +9941,7 @@
     "type": "adjective",
     "subType": "na-adj",
     "isException": true,
-    "meaning": "pretty; lovely; beautiful",
+    "meaning": "pretty / clean (tidy, neat, or pleasing appearance)",
     "tags": [],
     "base": {
       "kana": "きれい",
@@ -10049,7 +10049,7 @@
     "type": "adjective",
     "subType": "i-adj",
     "isException": false,
-    "meaning": "black",
+    "meaning": "black (adjective)",
     "tags": [],
     "base": {
       "kana": "くろい",
@@ -10193,7 +10193,7 @@
     "type": "adjective",
     "subType": "i-adj",
     "isException": false,
-    "meaning": "short",
+    "meaning": "short (length or duration)",
     "tags": [],
     "base": {
       "kana": "みじかい",
@@ -10333,7 +10333,7 @@
   },
   {
     "id": "nurui",
-    "jlptLevel": "N5",
+    "jlptLevel": "N4",
     "type": "adjective",
     "subType": "i-adj",
     "isException": false,
@@ -10625,7 +10625,7 @@
     "type": "adjective",
     "subType": "i-adj",
     "isException": false,
-    "meaning": "cold",
+    "meaning": "cold (ambient temperature or weather)",
     "tags": [],
     "base": {
       "kana": "さむい",
@@ -10697,7 +10697,7 @@
     "type": "adjective",
     "subType": "i-adj",
     "isException": false,
-    "meaning": "white",
+    "meaning": "white (adjective)",
     "tags": [],
     "base": {
       "kana": "しろい",
@@ -11165,7 +11165,7 @@
     "type": "adjective",
     "subType": "i-adj",
     "isException": false,
-    "meaning": "cold to the touch",
+    "meaning": "cold (to the touch, e.g., a drink or object)",
     "tags": [],
     "base": {
       "kana": "つめたい",
@@ -11269,7 +11269,7 @@
   },
   {
     "id": "usui",
-    "jlptLevel": "N5",
+    "jlptLevel": "N4",
     "type": "adjective",
     "subType": "i-adj",
     "isException": false,
@@ -11305,7 +11305,7 @@
   },
   {
     "id": "wakai",
-    "jlptLevel": "N5",
+    "jlptLevel": "N4",
     "type": "adjective",
     "subType": "i-adj",
     "isException": false,
@@ -11885,7 +11885,7 @@
     "type": "adjective",
     "subType": "na-adj",
     "isException": false,
-    "meaning": "strange; peculiar; weird",
+    "meaning": "strange / weird (abnormal or unnatural)",
     "tags": [],
     "base": {
       "kana": "へん",
@@ -12569,7 +12569,7 @@
     "type": "adjective",
     "subType": "i-adj",
     "isException": false,
-    "meaning": "strange or funny",
+    "meaning": "strange / funny (amusing, suspicious, or out of the ordinary)",
     "tags": [],
     "base": {
       "kana": "おかしい",
@@ -12821,7 +12821,7 @@
     "type": "adjective",
     "subType": "na-adj",
     "isException": true,
-    "meaning": "usually",
+    "meaning": "usually; generally; in most cases (frequency)",
     "tags": [],
     "base": {
       "kana": "たいてい",
@@ -13037,7 +13037,7 @@
     "type": "adjective",
     "subType": "i-adj",
     "isException": false,
-    "meaning": "beautiful",
+    "meaning": "beautiful (aesthetically deeply pleasing or elegant)",
     "tags": [],
     "base": {
       "kana": "うつくしい",
@@ -13181,7 +13181,7 @@
     "type": "adjective",
     "subType": "i-adj",
     "isException": false,
-    "meaning": "brown",
+    "meaning": "brown (adjective)",
     "tags": [],
     "base": {
       "kana": "ちゃいろい",
@@ -13533,7 +13533,7 @@
     "type": "noun",
     "subType": "people_and_family",
     "isException": false,
-    "meaning": "baby; infant",
+    "meaning": "baby (colloquial, affectionate)",
     "tags": [
       "people_and_family"
     ],
@@ -13549,7 +13549,7 @@
     "type": "noun",
     "subType": "people_and_family",
     "isException": false,
-    "meaning": "baby; infant",
+    "meaning": "baby / infant (objective or literal term)",
     "tags": [
       "people_and_family"
     ],
@@ -13757,7 +13757,7 @@
     "type": "noun",
     "subType": "places_and_transport",
     "isException": false,
-    "meaning": "building",
+    "meaning": "building (modern, multi-story structure)",
     "tags": [
       "places_and_transport"
     ],
@@ -14253,7 +14253,7 @@
     "type": "noun",
     "subType": "general_and_abstract",
     "isException": false,
-    "meaning": "usually",
+    "meaning": "usually; normally; ordinarily (normalcy)",
     "tags": [
       "general_and_abstract"
     ],
@@ -15117,7 +15117,7 @@
     "type": "noun",
     "subType": "everyday_objects",
     "isException": false,
-    "meaning": "dictionary",
+    "meaning": "dictionary / encyclopedia (often used in book titles)",
     "tags": [
       "everyday_objects"
     ],
@@ -15549,7 +15549,7 @@
     "type": "noun",
     "subType": "general_and_abstract",
     "isException": false,
-    "meaning": "plan",
+    "meaning": "plan / project (a concrete, deliberate scheme or intention)",
     "tags": [
       "general_and_abstract"
     ],
@@ -16141,7 +16141,7 @@
     "type": "noun",
     "subType": "general_and_abstract",
     "isException": false,
-    "meaning": "industry",
+    "meaning": "industry (manufacturing / industrial production)",
     "tags": [
       "general_and_abstract"
     ],
@@ -16601,11 +16601,11 @@
   },
   {
     "id": "musuko",
-    "jlptLevel": "N4",
+    "jlptLevel": "N5",
     "type": "noun",
     "subType": "people_and_family",
     "isException": false,
-    "meaning": "son",
+    "meaning": "son (one's own, humble)",
     "tags": [
       "people_and_family"
     ],
@@ -16617,11 +16617,11 @@
   },
   {
     "id": "musume",
-    "jlptLevel": "N4",
+    "jlptLevel": "N5",
     "type": "noun",
     "subType": "people_and_family",
     "isException": false,
-    "meaning": "daughter",
+    "meaning": "daughter (one's own, humble)",
     "tags": [
       "people_and_family"
     ],
@@ -17065,11 +17065,11 @@
   },
   {
     "id": "otto",
-    "jlptLevel": "N4",
+    "jlptLevel": "N5",
     "type": "noun",
     "subType": "people_and_family",
     "isException": false,
-    "meaning": "husband",
+    "meaning": "husband (one's own, humble)",
     "tags": [
       "people_and_family"
     ],
@@ -17453,7 +17453,7 @@
     "type": "noun",
     "subType": "general_and_abstract",
     "isException": false,
-    "meaning": "industry",
+    "meaning": "industry (general business / all industries)",
     "tags": [
       "general_and_abstract"
     ],
@@ -18029,7 +18029,7 @@
     "type": "noun",
     "subType": "people_and_family",
     "isException": false,
-    "meaning": "grandmother",
+    "meaning": "grandmother (one's own, humble)",
     "tags": [
       "people_and_family"
     ],
@@ -18045,7 +18045,7 @@
     "type": "noun",
     "subType": "people_and_family",
     "isException": false,
-    "meaning": "grandfather",
+    "meaning": "grandfather (one's own, humble)",
     "tags": [
       "people_and_family"
     ],
@@ -18813,7 +18813,7 @@
     "type": "noun",
     "subType": "general_and_abstract",
     "isException": false,
-    "meaning": "plan",
+    "meaning": "plan / schedule (an expected event, itinerary, or appointment)",
     "tags": [
       "general_and_abstract"
     ],
@@ -19117,7 +19117,7 @@
     "type": "noun",
     "subType": "general_and_abstract",
     "isException": false,
-    "meaning": "red; crimson; scarlet",
+    "meaning": "red; crimson; scarlet (noun)",
     "tags": [
       "general_and_abstract"
     ],
@@ -19181,7 +19181,7 @@
     "type": "noun",
     "subType": "people_and_family",
     "isException": false,
-    "meaning": "older sister; elder sister",
+    "meaning": "older sister (one's own, humble)",
     "tags": [
       "people_and_family"
     ],
@@ -19197,7 +19197,7 @@
     "type": "noun",
     "subType": "people_and_family",
     "isException": false,
-    "meaning": "elder brother; older brother",
+    "meaning": "older brother (one's own, humble)",
     "tags": [
       "people_and_family"
     ],
@@ -19213,7 +19213,7 @@
     "type": "noun",
     "subType": "general_and_abstract",
     "isException": false,
-    "meaning": "blue; azure",
+    "meaning": "blue; azure (noun)",
     "tags": [
       "general_and_abstract"
     ],
@@ -19565,7 +19565,7 @@
     "type": "noun",
     "subType": "general_and_abstract",
     "isException": false,
-    "meaning": "brown",
+    "meaning": "brown (noun)",
     "tags": [
       "general_and_abstract"
     ],
@@ -19597,7 +19597,7 @@
     "type": "noun",
     "subType": "people_and_family",
     "isException": false,
-    "meaning": "father",
+    "meaning": "father (one's own, humble)",
     "tags": [
       "people_and_family"
     ],
@@ -19773,7 +19773,7 @@
     "type": "noun",
     "subType": "people_and_family",
     "isException": false,
-    "meaning": "who",
+    "meaning": "who (polite/formal)",
     "tags": [
       "people_and_family"
     ],
@@ -20365,7 +20365,7 @@
     "type": "noun",
     "subType": "people_and_family",
     "isException": false,
-    "meaning": "mother",
+    "meaning": "mother (one's own, humble)",
     "tags": [
       "people_and_family"
     ],
@@ -20621,7 +20621,7 @@
     "type": "noun",
     "subType": "places_and_transport",
     "isException": false,
-    "meaning": "area",
+    "meaning": "strange / weird (abnormal or unnatural)",
     "tags": [
       "places_and_transport"
     ],
@@ -20989,7 +20989,7 @@
     "type": "noun",
     "subType": "people_and_family",
     "isException": false,
-    "meaning": "younger sister",
+    "meaning": "younger sister (one's own, humble)",
     "tags": [
       "people_and_family"
     ],
@@ -21133,7 +21133,7 @@
     "type": "noun",
     "subType": "everyday_objects",
     "isException": false,
-    "meaning": "dictionary",
+    "meaning": "dictionary (literal: character searcher / older term)",
     "tags": [
       "everyday_objects"
     ],
@@ -21149,7 +21149,7 @@
     "type": "noun",
     "subType": "places_and_transport",
     "isException": false,
-    "meaning": "automobile; motorcar; motor vehicle; car",
+    "meaning": "automobile (formal/written term)",
     "tags": [
       "places_and_transport"
     ],
@@ -21181,7 +21181,7 @@
     "type": "noun",
     "subType": "everyday_objects",
     "isException": false,
-    "meaning": "dictionary",
+    "meaning": "dictionary (general term)",
     "tags": [
       "everyday_objects"
     ],
@@ -21581,7 +21581,7 @@
     "type": "noun",
     "subType": "people_and_family",
     "isException": false,
-    "meaning": "family; members of a family",
+    "meaning": "family (one's own)",
     "tags": [
       "people_and_family"
     ],
@@ -22173,7 +22173,7 @@
     "type": "noun",
     "subType": "general_and_abstract",
     "isException": false,
-    "meaning": "black",
+    "meaning": "black (noun)",
     "tags": [
       "general_and_abstract"
     ],
@@ -22189,7 +22189,7 @@
     "type": "noun",
     "subType": "places_and_transport",
     "isException": false,
-    "meaning": "car; automobile; vehicle",
+    "meaning": "car / vehicle (everyday/colloquial term)",
     "tags": [
       "places_and_transport"
     ],
@@ -23181,7 +23181,7 @@
     "type": "noun",
     "subType": "people_and_family",
     "isException": false,
-    "meaning": "grandmother",
+    "meaning": "grandmother (someone else's, polite)",
     "tags": [
       "people_and_family"
     ],
@@ -23277,7 +23277,7 @@
     "type": "noun",
     "subType": "people_and_family",
     "isException": false,
-    "meaning": "mother; mom; mum; ma",
+    "meaning": "mother (someone else's, polite; or direct address)",
     "tags": [
       "people_and_family"
     ],
@@ -23389,7 +23389,7 @@
     "type": "noun",
     "subType": "people_and_family",
     "isException": false,
-    "meaning": "elder sister; young lady; miss; ma'am",
+    "meaning": "older sister (someone else's, polite; or direct address)",
     "tags": [
       "people_and_family"
     ],
@@ -23613,7 +23613,7 @@
     "type": "noun",
     "subType": "people_and_family",
     "isException": false,
-    "meaning": "father; dad; papa; pa; pop; daddy",
+    "meaning": "father (someone else's, polite; or direct address)",
     "tags": [
       "people_and_family"
     ],
@@ -23629,7 +23629,7 @@
     "type": "noun",
     "subType": "people_and_family",
     "isException": false,
-    "meaning": "younger brother",
+    "meaning": "younger brother (one's own, humble)",
     "tags": [
       "people_and_family"
     ],
@@ -24429,7 +24429,7 @@
     "type": "noun",
     "subType": "general_and_abstract",
     "isException": false,
-    "meaning": "white; innocence",
+    "meaning": "white; innocence (noun)",
     "tags": [
       "general_and_abstract"
     ],
@@ -24813,7 +24813,7 @@
     "type": "noun",
     "subType": "places_and_transport",
     "isException": false,
-    "meaning": "building",
+    "meaning": "building (general term for any physical structure)",
     "tags": [
       "places_and_transport"
     ],
@@ -25629,7 +25629,7 @@
     "type": "noun",
     "subType": "people_and_family",
     "isException": false,
-    "meaning": "grandfather; old man",
+    "meaning": "grandfather (someone else's, polite)",
     "tags": [
       "people_and_family"
     ],
@@ -27020,25 +27020,6 @@
       "kana": "まゆげ",
       "romaji": "mayuge",
       "kanji": "まゆ毛"
-    },
-    "forms": {}
-  },
-  {
-    "id": "vocab_0428",
-    "jlptLevel": "N5",
-    "type": "noun",
-    "subType": "body_and_clothing",
-    "isException": false,
-    "meaning": "beard",
-    "tags": [
-      "unit_3",
-      "body_parts",
-      "body_and_clothing"
-    ],
-    "base": {
-      "kana": "ひげ",
-      "romaji": "hige",
-      "kanji": "ひげ"
     },
     "forms": {}
   },

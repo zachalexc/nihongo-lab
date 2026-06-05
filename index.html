@@ -525,7 +525,7 @@
                 <div class="study-content">
                     <h2 class="prompt-text">Loading...</h2>
                     
-                    <input type="text" id="answer-input" class="answer-input" placeholder="Type answer in romaji or kana..." autocomplete="off">
+                    <input type="text" id="answer-input" class="answer-input" placeholder="Type answer in romaji or kana..." autocomplete="nope" autocorrect="off" autocapitalize="none" spellcheck="false">
                     
                     <div id="group-buttons-container" class="hidden" style="display: flex; gap: 10px; justify-content: center; margin-top: 1rem;">
                         <button class="btn btn-secondary group-btn" data-answer="group1">Group I</button>
@@ -535,8 +535,8 @@
                 </div>
                 
                 <div class="study-actions" style="margin-top: 2rem;">
-                    <button id="submit-btn" class="btn btn-primary">Submit</button>
                     <button id="reveal-btn" class="btn btn-secondary">Reveal</button>
+                    <button id="submit-btn" class="btn btn-primary">Submit</button>
                     <button id="retake-btn" class="btn btn-primary hidden">Retake Session</button>
                 </div>
             </div>
