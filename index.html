@@ -498,7 +498,7 @@
                     </div>
                 </h3>
                 <div class="checkbox-group" id="subset-checkboxes-container"></div>
-            </div>
+            </div>            
 
             <div class="settings-group" id="audio-settings-group">
                 <h3>Audio Options</h3>
@@ -508,6 +508,60 @@
                         <span class="custom-checkbox"></span>
                         Read Answer Aloud on Incorrect
                     </label>
+                    <label class="checkbox-label active-option">
+                        <input type="checkbox" id="audio-toggle-correct">
+                        <span class="custom-checkbox"></span>
+                        Read Answer Aloud on Correct
+                    </label>
+                </div>
+            </div>
+
+            <div class="settings-group" id="kanji-settings-group">
+                <h3>
+                    Kanji Options 
+                    <span id="kanji-info-icon" style="cursor: pointer; margin-left: auto; font-size: 1.2rem;" title="How to setup Handwriting">ℹ️</span>
+                </h3>
+                <div class="checkbox-group">
+                    <label class="checkbox-label active-option" title="Best experienced on mobile using a Japanese handwriting keyboard.">
+                        <input type="checkbox" id="kanji-practice-toggle">
+                        <span class="custom-checkbox"></span>
+                        Kanji Practice Mode (Handwriting)
+                    </label>
+                    <label class="checkbox-label active-option">
+                        <input type="checkbox" id="kanji-reveal-toggle">
+                        <span class="custom-checkbox"></span>
+                        Quick Reveal: Show Kanji on Correct
+                    </label>
+                </div>
+                <div id="kanji-tip-box" class="hidden" style="margin-top: 1rem; padding: 1rem; background: rgba(92, 138, 255, 0.1); border: 1px solid var(--accent-color); border-radius: 8px; font-size: 0.85rem;">
+                    <strong>Handwriting Keyboard Tip:</strong> To practice drawing kanji, add the Japanese Handwriting keyboard in your device settings.
+                    <br><br>• <strong>iOS:</strong> Settings &gt; General &gt; Keyboard &gt; Keyboards &gt; Add New Keyboard &gt; Japanese &gt; Handwriting.
+                    <br>• <strong>Android:</strong> Gboard Settings &gt; Languages &gt; Japanese &gt; Handwriting.
+                    <br><br><em>Pro-Tip:</em> To ensure your phone doesn't auto-submit before you finish drawing, set your handwriting recognition delay to the slowest setting if your keyboard allows it (e.g., on Android: Gboard Settings &gt; Preferences &gt; Handwriting speed).
+                </div>
+            </div>
+
+            <div class="settings-group" id="srs-settings-group">
+                <h3>Spaced Repetition (SRS) Intervals</h3>
+                
+                <div style="display: flex; flex-direction: column; gap: 1rem; padding: 0.5rem 0;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem;">
+                        <div style="display: flex; flex-direction: column;">
+                            <span style="font-weight: 500; color: var(--text-primary);">Initial Review Delay</span>
+                            <span style="font-size: 0.85rem; color: var(--text-secondary);">How soon a missed word (or a kanji trace prompt) reappears.</span>
+                        </div>
+                        <input type="number" id="srs-initial-delay" min="1" max="50" step="1" value="4" class="answer-input" style="width: 70px; text-align: center; padding: 0.4rem; font-size: 1rem; flex-shrink: 0;">
+                    </div>
+
+                    <div id="final-delay-wrapper" style="padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem;">
+                            <div style="display: flex; flex-direction: column;">
+                                <span style="font-weight: 500; color: var(--text-primary);">Final Review Delay</span>
+                                <span style="font-size: 0.85rem; color: var(--text-secondary);">How far away a corrected word is pushed before graduating.</span>
+                            </div>
+                            <input type="number" id="srs-final-delay" min="1" max="50" step="1" value="10" class="answer-input" style="width: 70px; text-align: center; padding: 0.4rem; font-size: 1rem; flex-shrink: 0;">
+                        </div>
+                    </div>
                 </div>
             </div>
 

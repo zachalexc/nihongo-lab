@@ -575,3 +575,43 @@ input[type="range"]::-moz-range-thumb {
     opacity: 1;
     transform: translateX(-50%) translateY(0);
 }
+
+/* --- Kanji Practice Mode Visuals --- */
+.kanji-practice-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    flex-wrap: nowrap;
+    overflow-x: auto; /* Allows long words to scroll smoothly on mobile */
+    padding: 1rem 0 2rem 0;
+    width: 100%;
+}
+
+.kanji-svg-wrapper {
+    height: 80px;
+    width: 80px;
+    flex-shrink: 0;
+}
+
+/* Force KanjiVG SVGs to scale properly */
+.kanji-svg-wrapper svg {
+    width: 100%;
+    height: 100%;
+}
+
+/* Override KanjiVG default black colors for Dark Mode */
+.kanji-svg-wrapper svg path {
+    stroke: var(--accent-color) !important;
+}
+.kanji-svg-wrapper svg text {
+    fill: var(--text-secondary) !important;
+}
+
+.kana-text-wrapper {
+    font-size: 60px;
+    line-height: 80px;
+    color: var(--accent-color);
+    font-weight: 500;
+    flex-shrink: 0;
+}

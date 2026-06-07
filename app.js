@@ -3,9 +3,7 @@
 
 // --- PRNG & PREDICTABLE SHUFFLE ---
 
-/**
- * A basic Linear Congruential Generator (LCG) for predictable random numbers
- */
+// A basic Linear Congruential Generator (LCG) for predictable random numbers
 function createPRNG(seed) {
     return function() {
         seed = (seed * 9301 + 49297) % 233280;
@@ -13,10 +11,7 @@ function createPRNG(seed) {
     }
 }
 
-/**
- * Deterministically shuffles an array using the provided seed.
- * Ensures the vocabulary chunks remain identical across reloads.
- */
+// Deterministically shuffles an array using the provided seed. Ensures the vocabulary chunks remain identical across reloads.
 function seededShuffle(array, seed) {
     const prng = createPRNG(seed);
     const shuffled = [...array];
@@ -43,7 +38,8 @@ const AppState = {
     isCorrectionMode: false,
     flashTimer: null,
     sessionResults: [],
-    activeFuriganaIndex: -1
+    activeFuriganaIndex: -1,
+    isKanjiDrawingMode: false
 };
 
 // Restore persistent states for exclusions
@@ -112,14 +108,21 @@ const UI = {
     
     groupChoiceBtns: document.querySelectorAll('.group-btn'),
     audioToggleCheckbox: document.getElementById('audio-toggle'),
-    bulkActionBtns: document.querySelectorAll('.bulk-action-btn')
+    bulkActionBtns: document.querySelectorAll('.bulk-action-btn'),
+
+    audioToggleCorrectCheckbox: document.getElementById('audio-toggle-correct'),
+    kanjiSettingsGroup: document.getElementById('kanji-settings-group'),
+    kanjiPracticeToggle: document.getElementById('kanji-practice-toggle'),
+    kanjiRevealToggle: document.getElementById('kanji-reveal-toggle'),
+    kanjiInfoIcon: document.getElementById('kanji-info-icon'),
+    kanjiTipBox: document.getElementById('kanji-tip-box'),
+    srsInitialDelay: document.getElementById('srs-initial-delay'),
+    srsFinalDelay: document.getElementById('srs-final-delay'),
 };
 
 // --- CORE ENGINE: SPACED REPETITION ---
 
-/**
- * Standard Fisher-Yates Shuffle Algorithm for the active study queue
- */
+// Standard Fisher-Yates Shuffle Algorithm for the active study queue
 function shuffleArray(array) {
     const shuffled = [...array];
     for (let i = shuffled.length - 1; i > 0; i--) {
@@ -129,9 +132,7 @@ function shuffleArray(array) {
     return shuffled;
 }
 
-/**
- * Manages the visibility of setting sections based on the selected study mode.
- */
+// Manages the visibility of setting sections based on the selected study mode.
 function updateModeUI() {
     const isVerbTab = AppState.currentCategory === 'verb';
     const isTranslation = AppState.currentStudyMode === 'translation';
@@ -174,6 +175,14 @@ function updateModeUI() {
             lengthGroup.classList.toggle('hidden', AppState.currentStudyMode === 'reading');
         }
     }
+
+    // Toggle Final Review Delay visibility based on Kanji Practice Mode
+    const finalDelayWrapper = document.getElementById('final-delay-wrapper');
+    const kanjiToggle = document.getElementById('kanji-practice-toggle');
+    
+    if (finalDelayWrapper && kanjiToggle) {
+        finalDelayWrapper.classList.toggle('hidden', kanjiToggle.checked);
+    }
 }
 
 /**
@@ -203,7 +212,7 @@ function switchTab(category) {
 
     // Toggle visibility of specific settings groups for the Sentences tab
     const isSentence = category === 'sentence';
-    [UI.jlptSettingsGroup, UI.subsetSettingsGroup, UI.audioSettingsGroup].forEach(group => {
+    [UI.jlptSettingsGroup, UI.subsetSettingsGroup, UI.audioSettingsGroup, UI.kanjiSettingsGroup].forEach(group => {
         if (group) group.classList.toggle('hidden', isSentence);
     });
 
@@ -296,9 +305,7 @@ function renderMasterLists() {
     });
 }
 
-/**
- * Renders the 110 Sentence Subsets into the exclusion master list.
- */
+// Renders the 110 Sentence Subsets into the exclusion master list.
 function renderSentenceMasterList() {
     const container = document.getElementById('master-list-sentences');
     if (!container) return;
@@ -317,9 +324,7 @@ function renderSentenceMasterList() {
     container.innerHTML = html.join('');
 }
 
-/**
- * Dynamically builds the subset checkboxes based on active JLPT and Verb Group filters.
- */
+// Dynamically builds the subset checkboxes based on active JLPT and Verb Group filters.
 function renderSubsetCheckboxes() {
     if (!AppState.omniDatabase) return;
 
@@ -393,9 +398,7 @@ function renderSubsetCheckboxes() {
     UI.subsetContainer.innerHTML = htmlArray.join('');
 }
 
-/**
- * Helper to retrieve the active chunked vocabulary list based on all filters.
- */
+// Helper to retrieve the active chunked vocabulary list based on all filters.
 function getFilteredAndChunkedVocab() {
     if (!AppState.omniDatabase) return [];
 
@@ -640,8 +643,11 @@ function initializeSession() {
                         type: 'sentence',
                         wordId: item.id,
                         flashContent: item.japanese_reading,
-                        components: item.components, // ADD THIS: Pass components down
-                        japaneseText: item.japanese_text, // ADD THIS: Pass base text
+                        components: item.components, // Pass components down
+                        japaneseText: item.japanese_text, // Pass base text
+                    flashContent: item.japanese_reading,
+                    components: item.components, // Pass components down
+                    japaneseText: item.japanese_text, // Pass base text
                         promptText: AppState.currentStudyMode === 'reading' 
                             ? 'Type the kana reading. Use "-" to skip a word.' 
                             : 'Type the sentence you saw:',
@@ -688,6 +694,7 @@ function initializeSession() {
                 correctAnswerKana: targetForm.kana,
                 correctAnswerRomaji: targetForm.romaji,
                 readText: targetForm.kana,
+                kanjiText: targetForm.kanji || '',
                 step: 0
             });
         });
@@ -701,6 +708,7 @@ function initializeSession() {
                 correctAnswerKana: word.base.kana,
                 correctAnswerRomaji: word.base.romaji,
                 readText: word.base.kana,
+                kanjiText: word.base.kanji || '',
                 step: 0
             });
         });
@@ -724,6 +732,7 @@ function initializeSession() {
                         correctAnswerKana: targetForm.kana,
                         correctAnswerRomaji: targetForm.romaji,
                         readText: targetForm.kana,
+                        kanjiText: targetForm.kanji || '',
                         step: 0
                     });
                 }
@@ -773,7 +782,7 @@ function toggleUIInputs() {
     }
 }
 
-function loadNextQuestion() {
+async function loadNextQuestion() {
     if (AppState.studyQueue.length === 0) {
         finishSession();
         return;
@@ -781,7 +790,6 @@ function loadNextQuestion() {
 
     const currentQuestion = AppState.studyQueue[0];
     
-    // --- ADD THIS NEW BLOCK FOR READING MODE ---
     if (AppState.currentCategory === 'sentence' && AppState.currentStudyMode === 'reading') {
         const renderedSentence = currentQuestion.components 
             ? renderReadingSentence(currentQuestion.japaneseText, currentQuestion.components, AppState.activeFuriganaIndex)
@@ -850,8 +858,32 @@ function loadNextQuestion() {
         }
     } else {
         // --- STANDARD VOCAB MODE ---
-        UI.promptText.innerHTML = currentQuestion.promptText;
         const isGroupActive = AppState.currentStudyMode === 'group' && AppState.currentCategory === 'verb';
+
+        if (currentQuestion.step === 'kanji_review') {
+            // Auto-trigger Drawing Mode for review cards
+            AppState.isKanjiDrawingMode = true;
+            UI.promptText.innerHTML = `<span style="color: var(--text-secondary); font-size: 1.2rem;">Loading Stroke Order...</span>`;
+            
+            const components = await buildKanjiPracticeData(currentQuestion.kanjiText);
+            
+            let html = `<div class="kanji-practice-container">`;
+            components.forEach(comp => {
+                if (comp.type === 'kanji') {
+                    html += `<div class="kanji-svg-wrapper">${comp.svg}</div>`;
+                } else {
+                    html += `<div class="kana-text-wrapper">${comp.char}</div>`;
+                }
+            });
+            html += `</div>`;
+            html += `<div style="font-size: 1rem; color: var(--text-secondary);">${currentQuestion.promptText}</div>`;
+            
+            UI.promptText.innerHTML = html;
+        } else {
+            // Standard text prompt for fresh or Step 1/2 cards
+            UI.promptText.innerHTML = currentQuestion.promptText;
+        }
+
         if (!isGroupActive) {
             UI.answerInput.value = '';
             UI.answerInput.focus();
@@ -859,9 +891,10 @@ function loadNextQuestion() {
     }
     
     updateCounter();
+
 }
 
-function evaluateAnswer(submittedAnswer) {
+async function evaluateAnswer(submittedAnswer) {
     if (AppState.studyQueue.length === 0) return;
 
     const currentQuestion = AppState.studyQueue[0];
@@ -888,7 +921,8 @@ function evaluateAnswer(submittedAnswer) {
                 
                 const questionToRequeue = AppState.studyQueue.shift();
                 questionToRequeue.step = 0; // Reset step so it acts fresh when they see it again
-                const insertIndex = Math.min(3, AppState.studyQueue.length);
+                const initialDelay = parseInt(UI.srsInitialDelay?.value, 10) || 4;
+                const insertIndex = Math.min(initialDelay, AppState.studyQueue.length);
                 AppState.studyQueue.splice(insertIndex, 0, questionToRequeue);
                 
                 setTimeout(() => loadNextQuestion(), 300);
@@ -916,7 +950,7 @@ function evaluateAnswer(submittedAnswer) {
         const feedbackColor = score >= 80 ? 'var(--success-color)' : 'var(--error-color)';
         flashElementColor(UI.answerInput, feedbackColor);
 
-        // --- NEW: Update Memory ---
+        // Update Memory
         let flashMemory = [];
         try {
             flashMemory = JSON.parse(localStorage.getItem('japaneseStudyApp_FlashMemory') || '[]');
@@ -949,10 +983,16 @@ function evaluateAnswer(submittedAnswer) {
         visualTarget = UI.groupBtnsContainer; 
     } else {
         const normalizedInput = submittedAnswer.trim().toLowerCase();
-        isCorrect = 
-            normalizedInput === currentQuestion.correctAnswerKana || 
-            normalizedInput === currentQuestion.correctAnswerRomaji.toLowerCase();
+        
+        // Split the checks so we know HOW they got it right
+        const isKanaMatch = normalizedInput === currentQuestion.correctAnswerKana || normalizedInput === currentQuestion.correctAnswerRomaji.toLowerCase();
+        const isExactKanjiMatch = currentQuestion.kanjiText && normalizedInput === currentQuestion.kanjiText;
+        
+        isCorrect = isKanaMatch || isExactKanjiMatch;
         visualTarget = UI.answerInput;
+        
+        // Attach flags temporarily to use in the logic below
+        currentQuestion._isExactKanjiMatch = isExactKanjiMatch;
     }
 
     // If we are waiting for the user to type the correct word after a mistake
@@ -964,10 +1004,40 @@ function evaluateAnswer(submittedAnswer) {
             // Now that it's corrected, apply the re-insertion logic (4 spaces away)
             const questionToRequeue = AppState.studyQueue.shift();
             const requeueItem = { ...questionToRequeue, step: 1 };
-            const insertIndex = Math.min(4, AppState.studyQueue.length);
+            const initialDelay = parseInt(UI.srsInitialDelay?.value, 10) || 4;
+            const insertIndex = Math.min(initialDelay, AppState.studyQueue.length);
             AppState.studyQueue.splice(insertIndex, 0, requeueItem);
 
-            setTimeout(() => loadNextQuestion(), 300);
+            processCorrectAnswerVisuals(currentQuestion);
+        } else {
+            flashElementColor(visualTarget, 'var(--error-color)');
+        }
+        return;
+    }
+
+    // --- NEW: KANJI DRAWING MODE EVALUATION ---
+    if (AppState.isKanjiDrawingMode) {
+        if (currentQuestion._isExactKanjiMatch) { 
+            flashElementColor(visualTarget, 'var(--success-color)');
+            AppState.isKanjiDrawingMode = false;
+            
+            const questionObj = AppState.studyQueue.shift();
+            
+            // Check if this was a delayed review or a fresh intercept
+            if (questionObj.step === 'kanji_review') {
+                // They successfully reviewed the kanji. Graduate the word!
+                AppState.completedCount++;
+            } else {
+                // They just intercepted it. Treat as a soft requeue for later.
+                questionObj.step = 'kanji_review'; 
+                
+                // Use the new unified SRS setting
+                const initialDelay = parseInt(UI.srsInitialDelay?.value, 10) || 4; 
+                const insertIndex = Math.min(initialDelay, AppState.studyQueue.length);
+                AppState.studyQueue.splice(insertIndex, 0, questionObj);
+            }
+
+            processCorrectAnswerVisuals(currentQuestion);
         } else {
             flashElementColor(visualTarget, 'var(--error-color)');
         }
@@ -975,22 +1045,83 @@ function evaluateAnswer(submittedAnswer) {
     }
 
     if (isCorrect) {
+        const hasKanji = currentQuestion.kanjiText && /[\u4e00-\u9faf]/.test(currentQuestion.kanjiText);
+        const practiceModeOn = UI.kanjiPracticeToggle && UI.kanjiPracticeToggle.checked;
+
+        // Partial Success Intercept: They typed kana, but Practice Mode wants Kanji
+        if (practiceModeOn && hasKanji && !currentQuestion._isExactKanjiMatch) {
+            AppState.isKanjiDrawingMode = true;
+            flashElementColor(visualTarget, 'var(--accent-color)'); // Blue "Info" flash
+
+            // Fetch and show SVGs
+            UI.promptText.innerHTML = `<span style="color: var(--text-secondary); font-size: 1.2rem;">Loading Stroke Order...</span>`;
+            const components = await buildKanjiPracticeData(currentQuestion.kanjiText);
+            
+            let html = `<div class="kanji-practice-container">`;
+            components.forEach(comp => {
+                if (comp.type === 'kanji') {
+                    html += `<div class="kanji-svg-wrapper">${comp.svg}</div>`;
+                } else {
+                    html += `<div class="kana-text-wrapper">${comp.char}</div>`;
+                }
+            });
+            html += `</div>`;
+            html += `<div style="font-size: 1rem; color: var(--text-secondary);">${currentQuestion.promptText}</div>`;
+            
+            UI.promptText.innerHTML = html;
+            UI.answerInput.value = '';
+            UI.answerInput.focus();
+            return; // Stop here and wait for them to draw it
+        }
+
+        // Full Success: Graduate the word
         flashElementColor(visualTarget, 'var(--success-color)');
         const currentQuestionObj = AppState.studyQueue.shift();
         
         if (currentQuestionObj.step === 1) {
-            // Previously missed word: move to step 2 and re-insert 10 positions away
             currentQuestionObj.step = 2;
-            const insertIndex = Math.min(10, AppState.studyQueue.length);
+            const finalDelay = parseInt(UI.srsFinalDelay?.value, 10) || 10;
+            const insertIndex = Math.min(finalDelay, AppState.studyQueue.length);
             AppState.studyQueue.splice(insertIndex, 0, currentQuestionObj);
         } else {
-            // step 0 (fresh) or step 2 (final review): graduate
             AppState.completedCount++;
         }
-        setTimeout(() => loadNextQuestion(), 300);
+        processCorrectAnswerVisuals(currentQuestion);
     } else {
         handleIncorrectAnswer(currentQuestion, visualTarget);
     }
+}
+
+function processCorrectAnswerVisuals(currentQuestion) {
+    let delay = 300; // Standard snappy delay
+
+    // 1. Play Audio on Correct
+    if (UI.audioToggleCorrectCheckbox && UI.audioToggleCorrectCheckbox.checked) {
+        speakJapanese(currentQuestion.readText);
+    }
+
+    // 2. Quick Reveal (Kanji Flash)
+    const isGroupActive = AppState.currentStudyMode === 'group' && AppState.currentCategory === 'verb';
+    
+    // Only flash if the toggle is checked, the mode isn't "Group", and a kanji actually exists
+    if (!isGroupActive && UI.kanjiRevealToggle && UI.kanjiRevealToggle.checked && currentQuestion.kanjiText) {
+        UI.promptText.innerHTML = `
+            <div style="font-size: 3.5rem; color: var(--accent-color); line-height: 1.2; margin-bottom: 0.5rem;">
+                <ruby>${currentQuestion.kanjiText}<rt style="font-size: 1.2rem; color: var(--text-secondary);">${currentQuestion.correctAnswerKana}</rt></ruby>
+            </div>
+        `;
+        UI.answerInput.value = ''; // Clear input early for a cleaner visual
+        
+        // --- DYNAMIC TIMING LOGIC ---
+        // Reuse the "Flash Speed Multiplier" if it exists, otherwise default to 1.0
+        const speedMultiplier = parseFloat(UI.flashSpeedNumber?.value || 1);
+        // Calculate: (chars / 2.5 chars per sec) * multiplier * 1000ms, min 1000ms for readability
+        const dynamicDelay = Math.max(1000, (currentQuestion.kanjiText.length / 2.5) * 1000 * speedMultiplier);
+        
+        delay = dynamicDelay; 
+    }
+
+    setTimeout(() => loadNextQuestion(), delay);
 }
 
 function handleIncorrectAnswer(questionToRequeue, visualTarget) {
@@ -1029,6 +1160,53 @@ function handleIncorrectAnswer(questionToRequeue, visualTarget) {
 }
 
 // --- UTILITIES ---
+
+// --- KANJIVG UTILITIES ---
+
+// Checks if a character is a Kanji and returns its 5-digit hex code (KanjiVG format). Kanji Unicode Range: \u4e00-\u9faf
+function getKanjiHex(char) {
+    if (/[\u4e00-\u9faf]/.test(char)) {
+        // Convert to hex and pad with leading zeros to ensure 5 digits
+        return ('00000' + char.charCodeAt(0).toString(16)).slice(-5);
+    }
+    return null;
+}
+
+// Fetches the raw SVG string from the KanjiVG GitHub repository.
+async function fetchKanjiVG(hexCode) {
+    const url = `https://raw.githubusercontent.com/KanjiVG/kanjivg/master/kanji/${hexCode}.svg`;
+    try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Kanji SVG not found for hex: ${hexCode}`);
+        
+        const rawText = await response.text();
+        
+        // Strip XML/DOCTYPE headers by matching strictly from <svg to </svg>
+        const svgMatch = rawText.match(/<svg[\s\S]*<\/svg>/i);
+        return svgMatch ? svgMatch[0] : rawText;
+        
+    } catch (error) {
+        console.warn('KanjiVG Fetch Error:', error);
+        return null;
+    }
+}
+
+// Parses a Japanese word and builds an array of components (SVGs for kanji, text for kana).
+async function buildKanjiPracticeData(wordText) {
+    if (!wordText) return [];
+    
+    const components = [];
+    for (const char of wordText) {
+        const hex = getKanjiHex(char);
+        if (hex) {
+            const svgData = await fetchKanjiVG(hex);
+            components.push({ type: 'kanji', char: char, svg: svgData });
+        } else {
+            components.push({ type: 'kana', char: char });
+        }
+    }
+    return components;
+}
 
 function updateSentenceHistory(start, end) {
     let history = [];
@@ -1145,6 +1323,7 @@ function retakeSession() {
     AppState.studyQueue = [...AppState.initialQueue];
     AppState.completedCount = 0;
     AppState.isCorrectionMode = false;
+    AppState.isKanjiDrawingMode = false;
     AppState.activeFuriganaIndex = -1;
     
     // Reset the inline styles applied during the finished state
@@ -1166,6 +1345,7 @@ function resetToSettings() {
     AppState.studyQueue = [];
     AppState.completedCount = 0;
     AppState.isCorrectionMode = false;
+    AppState.isKanjiDrawingMode = false;
     AppState.activeFuriganaIndex = -1;
     
     UI.answerInput.style.display = '';
@@ -1195,9 +1375,7 @@ function flashElementColor(element, color) {
     }, 400);
 }
 
-/**
- * Evaluates the user's input against the chunked components to find the error point.
- */
+// Evaluates the user's input against the chunked components to find the error point.
 function findFirstErrorComponent(userInput, components) {
     let cursor = 0;
 
@@ -1292,10 +1470,7 @@ function findExactMatch(text, reading) {
     });
 }
 
-/**
- * Scans the OmniDatabase for a matching kanji or kana string and returns the English meaning.
- * Includes fuzzy suffix matching to catch advanced conjugations (e.g. ました -> ます).
- */
+// Scans the OmniDatabase for a matching kanji or kana string and returns the English meaning. Includes fuzzy suffix matching to catch advanced conjugations (e.g. ました -> ます).
 function getWordTranslation(text, reading) {
     if (!AppState.omniDatabase) return "";
 
@@ -1357,7 +1532,7 @@ function saveSettings() {
         settingsState[key] = cb.checked;
     });
 
-    // UPDATE THIS BLOCK to save both verb and sentence modes
+    // Save both verb and sentence modes
     const activeVerbRadio = UI.settingsSection.querySelector('input[name="verb-study-mode"]:checked');
     if (activeVerbRadio) settingsState['verb-study-mode'] = activeVerbRadio.value;
 
@@ -1369,6 +1544,10 @@ function saveSettings() {
     
     settingsState['sentenceSubsetStart'] = UI.sentenceSubsetStart.value;
     settingsState['sentenceSubsetEnd'] = UI.sentenceSubsetEnd.value;
+
+    // Save the new SRS inputs
+    if (UI.srsInitialDelay) settingsState['srsInitialDelay'] = UI.srsInitialDelay.value;
+    if (UI.srsFinalDelay) settingsState['srsFinalDelay'] = UI.srsFinalDelay.value;
 
     localStorage.setItem('japaneseStudyApp_Settings', JSON.stringify(settingsState));
 }
@@ -1393,7 +1572,7 @@ function loadSettings() {
             }
         });
 
-        // UPDATE THIS BLOCK to restore radio states properly
+        // Restore radio states properly
         if (settingsState['verb-study-mode']) {
             const radio = UI.settingsSection.querySelector(`input[name="verb-study-mode"][value="${settingsState['verb-study-mode']}"]`);
             if (radio) radio.checked = true;
@@ -1419,6 +1598,10 @@ function loadSettings() {
         
         if (settingsState['sentenceSubsetStart']) UI.sentenceSubsetStart.value = settingsState['sentenceSubsetStart'];
         if (settingsState['sentenceSubsetEnd']) UI.sentenceSubsetEnd.value = settingsState['sentenceSubsetEnd'];
+        
+        // Load the new SRS inputs
+        if (settingsState['srsInitialDelay'] && UI.srsInitialDelay) UI.srsInitialDelay.value = settingsState['srsInitialDelay'];
+        if (settingsState['srsFinalDelay'] && UI.srsFinalDelay) UI.srsFinalDelay.value = settingsState['srsFinalDelay'];
 
         updateModeUI();
     }
@@ -1460,6 +1643,16 @@ UI.flashLengthNumber.addEventListener('input', () => {
     UI.flashLengthSlider.value = UI.flashLengthNumber.value;
 });
 
+// Toggle the Kanji Handwriting Keyboard Instructions
+if (UI.kanjiInfoIcon) {
+    UI.kanjiInfoIcon.addEventListener('click', () => {
+        UI.kanjiTipBox.classList.toggle('hidden');
+    });
+}
+
+UI.srsInitialDelay.addEventListener('input', saveSettings);
+UI.srsFinalDelay.addEventListener('input', saveSettings);
+
 UI.revealBtn.addEventListener('click', () => {
     // Prevent the reveal logic from firing if we are clicking "Back to Settings"
     if (UI.revealBtn.textContent === 'Back to Settings') return;
@@ -1484,6 +1677,17 @@ UI.answerInput.addEventListener('keypress', (e) => {
 
 UI.settingsSection.addEventListener('change', (e) => {
     if (e.target.type === 'checkbox' || e.target.type === 'radio') {
+        // --- NEW: Kanji Options Mutual Exclusivity ---
+        if (e.target.id === 'kanji-practice-toggle' && e.target.checked) {
+            if (UI.kanjiRevealToggle) {
+                UI.kanjiRevealToggle.checked = false;
+            }
+        }
+        if (e.target.id === 'kanji-reveal-toggle' && e.target.checked) {
+            if (UI.kanjiPracticeToggle) {
+                UI.kanjiPracticeToggle.checked = false;
+            }
+        }
         // Handle Verb Study Mode Radios
         if (e.target.name === 'verb-study-mode') {
             AppState.currentStudyMode = e.target.value;
@@ -1560,6 +1764,7 @@ UI.settingsSection.addEventListener('change', (e) => {
         // Always save state and update estimator for any other checkbox change (like subsets)
         saveSettings();
         updateLiveEstimator();
+        updateModeUI();
     }
 });
 
