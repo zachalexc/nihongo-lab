@@ -1538,12 +1538,12 @@
   {
     "id": "15_1",
     "japanese_text": "7時に食べました。",
-    "japanese_reading": "ななじにたべました。",
+    "japanese_reading": "しちじにたべました。",
     "english_translation": "I ate at 7 o'clock.",
     "components": [
       {
         "word_text": "7時",
-        "word_reading": "ななじ",
+        "word_reading": "しちじ",
         "type": "Time",
         "highlighted": true
       },
