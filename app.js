@@ -27,6 +27,8 @@ function seededShuffle(array, seed) {
 const AppState = {
     omniDatabase: [],
     sentenceDatabase: [],
+    devSentenceDatabase: [],
+    devSubsets: [],
     sentenceGroups: [],
     studyQueue: [],
     originalTotal: 0,
@@ -39,7 +41,11 @@ const AppState = {
     flashTimer: null,
     sessionResults: [],
     activeFuriganaIndex: -1,
-    isKanjiDrawingMode: false
+    isKanjiDrawingMode: false,
+    isGrading: false,
+    lastSubmitTime: 0,
+    isDevUnlocked: false,
+    devMasteredSubsets: new Set()
 };
 
 // Restore persistent states for exclusions
@@ -57,12 +63,23 @@ try {
     AppState.masteredSubsets = new Set();
 }
 
+try {
+    AppState.devMasteredSubsets = new Set(JSON.parse(localStorage.getItem('japaneseStudyApp_DevMasteredSubsets') || '[]'));
+} catch (error) {
+    console.warn('Failed to parse dev mastered subsets. Resetting to empty.');
+    AppState.devMasteredSubsets = new Set();
+}
+
 function saveKnownWords() {
     localStorage.setItem('japaneseStudyApp_KnownWords', JSON.stringify(Array.from(AppState.knownWords)));
 }
 
 function saveMasteredSubsets() {
     localStorage.setItem('japaneseStudyApp_MasteredSubsets', JSON.stringify(Array.from(AppState.masteredSubsets)));
+}
+
+function saveDevMasteredSubsets() {
+    localStorage.setItem('japaneseStudyApp_DevMasteredSubsets', JSON.stringify(Array.from(AppState.devMasteredSubsets)));
 }
 
 // --- DOM ELEMENTS ---
@@ -91,6 +108,18 @@ const UI = {
     tabAdjectives: document.getElementById('tab-adjectives'),
     tabNouns: document.getElementById('tab-nouns'),
     tabSentences: document.getElementById('tab-sentences'),
+    tabDev: document.getElementById('tab-dev'),
+    devLockView: document.getElementById('dev-lock-view'),
+    devSettingsView: document.getElementById('dev-settings-view'),
+    devPasswordInput: document.getElementById('dev-password-input'),
+    devUnlockBtn: document.getElementById('dev-unlock-btn'),
+    devErrorMsg: document.getElementById('dev-error-msg'),
+    devSubsetStart: document.getElementById('dev-subset-start'),
+    devSubsetEnd: document.getElementById('dev-subset-end'),
+    devSubsetTo: document.getElementById('dev-subset-to'),
+    devSubsetSingle: document.getElementById('dev-subset-single'),
+    devSubsetRange: document.getElementById('dev-subset-range'),
+    devHistoryIndicator: document.getElementById('dev-history-indicator'),
     jlptSettingsGroup: document.getElementById('jlpt-settings-group'),
     sentenceRangeSettingsGroup: document.getElementById('sentence-range-settings-group'),
     sentenceSubsetStart: document.getElementById('sentence-subset-start'),
@@ -196,9 +225,11 @@ function switchTab(category) {
         AppState.currentStudyMode = document.querySelector('input[name="sentence-study-mode"]:checked')?.value || 'reading';
     } else if (category === 'verb') {
         AppState.currentStudyMode = document.querySelector('input[name="verb-study-mode"]:checked')?.value || 'translation';
+    } else if (category === 'dev') {
+        AppState.currentStudyMode = 'reading';
     }
 
-    const targetId = `tab-${category}s`;
+    const targetId = category === 'dev' ? 'tab-dev' : `tab-${category}s`;
 
     // Update active class on the tab buttons
     UI.tabBtns.forEach(btn => {
@@ -206,14 +237,14 @@ function switchTab(category) {
     });
 
     // Toggle visibility of content wrappers
-    [UI.tabVerbs, UI.tabAdjectives, UI.tabNouns, UI.tabSentences].forEach(panel => {
+    [UI.tabVerbs, UI.tabAdjectives, UI.tabNouns, UI.tabSentences, UI.tabDev].forEach(panel => {
         if (panel) panel.classList.toggle('hidden', panel.id !== targetId);
     });
 
-    // Toggle visibility of specific settings groups for the Sentences tab
-    const isSentence = category === 'sentence';
+    // Toggle visibility of specific settings groups for Sentences and Dev tabs
+    const hideCommonGroups = category === 'sentence' || category === 'dev';
     [UI.jlptSettingsGroup, UI.subsetSettingsGroup, UI.audioSettingsGroup, UI.kanjiSettingsGroup].forEach(group => {
-        if (group) group.classList.toggle('hidden', isSentence);
+        if (group) group.classList.toggle('hidden', hideCommonGroups);
     });
 
     // Refresh the UI state for the selected category
@@ -328,8 +359,8 @@ function renderSentenceMasterList() {
 function renderSubsetCheckboxes() {
     if (!AppState.omniDatabase) return;
 
-    // Handle Sentences category transition
-    if (AppState.currentCategory === 'sentence') {
+    // Handle Sentences and Dev category transition
+    if (AppState.currentCategory === 'sentence' || AppState.currentCategory === 'dev') {
         // UI is now handled statically by the number inputs in HTML
         return;
     }
@@ -402,7 +433,7 @@ function renderSubsetCheckboxes() {
 function getFilteredAndChunkedVocab() {
     if (!AppState.omniDatabase) return [];
 
-    if (AppState.currentCategory === 'sentence') {
+    if (AppState.currentCategory === 'sentence' || AppState.currentCategory === 'dev') {
         return [];
     }
 
@@ -450,6 +481,40 @@ function getFilteredAndChunkedVocab() {
 // Calculates the expected number of flashcards based on current settings.
 
 function updateLiveEstimator() {
+    // --- DEV CATEGORY ESTIMATOR ---
+    if (AppState.currentCategory === 'dev') {
+        if (!AppState.isDevUnlocked || !AppState.devSubsets || AppState.devSubsets.length === 0) {
+            UI.estimatorText.innerHTML = `Estimated Flashcards: <span>Locked</span>`;
+            return;
+        }
+
+        const isDevSingle = UI.devSubsetSingle ? UI.devSubsetSingle.checked : (UI.settingsSection.querySelector('input[name="dev-subset-mode"]:checked')?.value === 'single');
+        let startVal = parseInt(UI.devSubsetStart?.value, 10) || 1;
+        let endVal = isDevSingle ? startVal : (parseInt(UI.devSubsetEnd?.value, 10) || startVal);
+
+        // Clamp to 1-42
+        startVal = Math.max(1, Math.min(42, startVal));
+        endVal = Math.max(1, Math.min(42, endVal));
+
+        if (startVal > endVal) {
+            const temp = startVal;
+            startVal = endVal;
+            endVal = temp;
+        }
+
+        let estimatedCount = 0;
+        for (let s = startVal; s <= endVal; s++) {
+            if (!AppState.devMasteredSubsets.has(s.toString())) {
+                const subset = AppState.devSubsets[s - 1];
+                if (subset) {
+                    estimatedCount += subset.length;
+                }
+            }
+        }
+        UI.estimatorText.innerHTML = `Estimated Flashcards: <span>${estimatedCount}</span>`;
+        return;
+    }
+
     // --- SENTENCE CATEGORY ESTIMATOR ---
     if (AppState.currentCategory === 'sentence') {
         if (AppState.currentStudyMode === 'flash' || AppState.currentStudyMode === 'listening') {
@@ -645,9 +710,6 @@ function initializeSession() {
                         flashContent: item.japanese_reading,
                         components: item.components, // Pass components down
                         japaneseText: item.japanese_text, // Pass base text
-                    flashContent: item.japanese_reading,
-                    components: item.components, // Pass components down
-                    japaneseText: item.japanese_text, // Pass base text
                         promptText: AppState.currentStudyMode === 'reading' 
                             ? 'Type the kana reading. Use "-" to skip a word.' 
                             : 'Type the sentence you saw:',
@@ -659,6 +721,67 @@ function initializeSession() {
                 });
             });
         }
+    } else if (AppState.currentCategory === 'dev') {
+        if (!AppState.isDevUnlocked || !AppState.devSubsets || AppState.devSubsets.length === 0) {
+            alert("Please unlock the Dev Sandbox first.");
+            return;
+        }
+
+        const isDevSingle = UI.devSubsetSingle ? UI.devSubsetSingle.checked : (UI.settingsSection.querySelector('input[name="dev-subset-mode"]:checked')?.value === 'single');
+        let startVal = parseInt(UI.devSubsetStart?.value, 10) || 1;
+        let endVal = isDevSingle ? startVal : (parseInt(UI.devSubsetEnd?.value, 10) || startVal);
+
+        // Clamp both values between 1 and 42
+        startVal = Math.max(1, Math.min(42, startVal));
+        endVal = Math.max(1, Math.min(42, endVal));
+
+        // Silently swap if entered backwards
+        if (startVal > endVal) {
+            const temp = startVal;
+            startVal = endVal;
+            endVal = temp;
+            if (!isDevSingle && UI.devSubsetStart && UI.devSubsetEnd) {
+                UI.devSubsetStart.value = startVal;
+                UI.devSubsetEnd.value = endVal;
+                saveSettings();
+            }
+        }
+
+        // Record History
+        updateDevSentenceHistory(startVal, endVal);
+
+        let selectedSubsets = [];
+        for (let s = startVal; s <= endVal; s++) {
+            if (AppState.devMasteredSubsets.has(s.toString())) continue;
+            const subset = AppState.devSubsets[s - 1];
+            if (subset) selectedSubsets.push(subset);
+        }
+
+        if (selectedSubsets.length === 0) {
+            alert("No sentences found in this range or all selected subsets are excluded.");
+            return;
+        }
+
+        selectedSubsets = shuffleArray(selectedSubsets);
+
+        rawQuestions = selectedSubsets.flatMap(subset => {
+            const shuffledSubset = shuffleArray(subset);
+            return shuffledSubset.map(item => {
+                return {
+                    type: 'sentence',
+                    wordId: item.id,
+                    flashContent: item.japanese_reading,
+                    components: item.components,
+                    japaneseText: item.japanese_text,
+                    englishTranslation: item.english_meaning || item.english || '',
+                    promptText: 'Type the kana reading. Use "-" to skip a word.',
+                    correctAnswerKana: item.japanese_reading.replace(/[。、？！\.\?!, ]/g, ''),
+                    correctAnswerRomaji: '___NO_ROMAJI___',
+                    readText: item.japanese_reading,
+                    step: 0
+                };
+            });
+        });
     } else if (isGroupActive) {
         // --- MODE 1: Verb Group Identification ---
         filteredVocab.forEach(word => {
@@ -757,6 +880,8 @@ function initializeSession() {
     AppState.initialQueue = [...AppState.studyQueue]; 
     AppState.sessionResults = [];
     AppState.completedCount = 0;
+    AppState.isGrading = false;
+    AppState.lastSubmitTime = 0;
 
     UI.settingsSection.classList.add('hidden');
     UI.studySection.classList.remove('hidden');
@@ -790,7 +915,7 @@ async function loadNextQuestion() {
 
     const currentQuestion = AppState.studyQueue[0];
     
-    if (AppState.currentCategory === 'sentence' && AppState.currentStudyMode === 'reading') {
+    if ((AppState.currentCategory === 'sentence' || AppState.currentCategory === 'dev') && AppState.currentStudyMode === 'reading') {
         const renderedSentence = currentQuestion.components 
             ? renderReadingSentence(currentQuestion.japaneseText, currentQuestion.components, AppState.activeFuriganaIndex)
             : currentQuestion.japaneseText;
@@ -891,204 +1016,220 @@ async function loadNextQuestion() {
     }
     
     updateCounter();
+    AppState.isGrading = false;
 
 }
 
 async function evaluateAnswer(submittedAnswer) {
+    const now = Date.now();
+    if (AppState.isGrading || (now - AppState.lastSubmitTime < 300)) return;
     if (AppState.studyQueue.length === 0) return;
 
-    const currentQuestion = AppState.studyQueue[0];
+    AppState.isGrading = true;
+    AppState.lastSubmitTime = now;
 
-    // --- ADD THIS ENTIRE BLOCK FOR READING MODE ---
-    if (AppState.currentCategory === 'sentence' && AppState.currentStudyMode === 'reading') {
-        // Strip out punctuation so user input aligns with the base kana string
-        const normalizedInput = submittedAnswer.trim().replace(/[。、？！\.\?!, ]/g, ''); 
-        const isCorrect = (normalizedInput === currentQuestion.correctAnswerKana);
+    try {
+        const currentQuestion = AppState.studyQueue[0];
 
-        if (isCorrect) {
-            if (currentQuestion.step === 0) {
-                // First-try success -> Graduate
-                flashElementColor(UI.answerInput, 'var(--success-color)');
-                AppState.completedCount++;
-                AppState.activeFuriganaIndex = -1;
-                AppState.studyQueue.shift();
-                
-                setTimeout(() => loadNextQuestion(), 300);
+        // --- ADD THIS ENTIRE BLOCK FOR READING MODE ---
+        if ((AppState.currentCategory === 'sentence' || AppState.currentCategory === 'dev') && AppState.currentStudyMode === 'reading') {
+            // Strip out punctuation so user input aligns with the base kana string
+            const normalizedInput = submittedAnswer.trim().replace(/[。、？！\.\?!, ]/g, ''); 
+            const isCorrect = (normalizedInput === currentQuestion.correctAnswerKana);
+
+            if (isCorrect) {
+                if (currentQuestion.step === 0) {
+                    // First-try success -> Graduate
+                    flashElementColor(UI.answerInput, 'var(--success-color)');
+                    AppState.completedCount++;
+                    AppState.activeFuriganaIndex = -1;
+                    AppState.studyQueue.shift();
+                    
+                    setTimeout(() => loadNextQuestion(), 300);
+                } else {
+                    // Corrected with spotlight -> SRS Re-insert 3 spaces down
+                    flashElementColor(UI.answerInput, 'var(--success-color)');
+                    AppState.activeFuriganaIndex = -1;
+                    
+                    const questionToRequeue = AppState.studyQueue.shift();
+                    questionToRequeue.step = 0; // Reset step so it acts fresh when they see it again
+                    const initialDelay = parseInt(UI.srsInitialDelay?.value, 10) || 4;
+                    const insertIndex = Math.min(initialDelay, AppState.studyQueue.length);
+                    AppState.studyQueue.splice(insertIndex, 0, questionToRequeue);
+                    
+                    setTimeout(() => loadNextQuestion(), 300);
+                }
             } else {
-                // Corrected with spotlight -> SRS Re-insert 3 spaces down
-                flashElementColor(UI.answerInput, 'var(--success-color)');
-                AppState.activeFuriganaIndex = -1;
+                flashElementColor(UI.answerInput, 'var(--error-color)');
+                currentQuestion.step = 1; // Mark as failed on first try
+                AppState.activeFuriganaIndex = findFirstErrorComponent(normalizedInput, currentQuestion.components);
                 
+                loadNextQuestion(); 
+                AppState.isGrading = true;
+                setTimeout(() => { AppState.isGrading = false; }, 300);
+            }
+            return;
+        }
+        // --- END READING MODE BLOCK ---
+
+        if (AppState.currentStudyMode === 'flash' || AppState.currentStudyMode === 'listening') {
+            const score = calculateSimilarity(submittedAnswer, currentQuestion.correctAnswerKana);
+            
+            AppState.sessionResults.push({
+                ...currentQuestion,
+                userAnswer: submittedAnswer,
+                score: score
+            });
+
+            const feedbackColor = score >= 80 ? 'var(--success-color)' : 'var(--error-color)';
+            flashElementColor(UI.answerInput, feedbackColor);
+
+            // Update Memory
+            let flashMemory = [];
+            try {
+                flashMemory = JSON.parse(localStorage.getItem('japaneseStudyApp_FlashMemory') || '[]');
+            } catch (e) {}
+            
+            // Remove if it exists, then add to front
+            flashMemory = flashMemory.filter(id => id !== currentQuestion.wordId);
+            flashMemory.unshift(currentQuestion.wordId);
+            
+            // Keep only 50 in memory to avoid bloated storage
+            if (flashMemory.length > 50) flashMemory = flashMemory.slice(0, 50);
+            localStorage.setItem('japaneseStudyApp_FlashMemory', JSON.stringify(flashMemory));
+
+            // Move the current question to the end of the queue for endless cycling
+            const currentQ = AppState.studyQueue.shift();
+            AppState.studyQueue.push(currentQ);
+
+            AppState.completedCount++;
+
+            setTimeout(() => loadNextQuestion(), 500);
+            return;
+        }
+
+        let isCorrect = false;
+        let visualTarget = null; 
+        
+        const isGroupActive = AppState.currentStudyMode === 'group' && AppState.currentCategory === 'verb';
+        if (isGroupActive) {
+            isCorrect = (submittedAnswer === currentQuestion.correctAnswer);
+            visualTarget = UI.groupBtnsContainer; 
+        } else {
+            const normalizedInput = submittedAnswer.trim().toLowerCase();
+            
+            // Split the checks so we know HOW they got it right
+            const isKanaMatch = normalizedInput === currentQuestion.correctAnswerKana || normalizedInput === currentQuestion.correctAnswerRomaji.toLowerCase();
+            const isExactKanjiMatch = currentQuestion.kanjiText && normalizedInput === currentQuestion.kanjiText;
+            
+            isCorrect = isKanaMatch || isExactKanjiMatch;
+            visualTarget = UI.answerInput;
+            
+            // Attach flags temporarily to use in the logic below
+            currentQuestion._isExactKanjiMatch = isExactKanjiMatch;
+        }
+
+        // If we are waiting for the user to type the correct word after a mistake
+        if (AppState.isCorrectionMode) {
+            if (isCorrect) {
+                flashElementColor(visualTarget, 'var(--success-color)');
+                AppState.isCorrectionMode = false;
+                
+                // Now that it's corrected, apply the re-insertion logic (4 spaces away)
                 const questionToRequeue = AppState.studyQueue.shift();
-                questionToRequeue.step = 0; // Reset step so it acts fresh when they see it again
+                const requeueItem = { ...questionToRequeue, step: 1 };
                 const initialDelay = parseInt(UI.srsInitialDelay?.value, 10) || 4;
                 const insertIndex = Math.min(initialDelay, AppState.studyQueue.length);
-                AppState.studyQueue.splice(insertIndex, 0, questionToRequeue);
-                
-                setTimeout(() => loadNextQuestion(), 300);
-            }
-        } else {
-            flashElementColor(UI.answerInput, 'var(--error-color)');
-            currentQuestion.step = 1; // Mark as failed on first try
-            AppState.activeFuriganaIndex = findFirstErrorComponent(normalizedInput, currentQuestion.components);
-            
-            loadNextQuestion(); 
-        }
-        return;
-    }
-    // --- END READING MODE BLOCK ---
+                AppState.studyQueue.splice(insertIndex, 0, requeueItem);
 
-    if (AppState.currentStudyMode === 'flash' || AppState.currentStudyMode === 'listening') {
-        const score = calculateSimilarity(submittedAnswer, currentQuestion.correctAnswerKana);
-        
-        AppState.sessionResults.push({
-            ...currentQuestion,
-            userAnswer: submittedAnswer,
-            score: score
-        });
-
-        const feedbackColor = score >= 80 ? 'var(--success-color)' : 'var(--error-color)';
-        flashElementColor(UI.answerInput, feedbackColor);
-
-        // Update Memory
-        let flashMemory = [];
-        try {
-            flashMemory = JSON.parse(localStorage.getItem('japaneseStudyApp_FlashMemory') || '[]');
-        } catch (e) {}
-        
-        // Remove if it exists, then add to front
-        flashMemory = flashMemory.filter(id => id !== currentQuestion.wordId);
-        flashMemory.unshift(currentQuestion.wordId);
-        
-        // Keep only 50 in memory to avoid bloated storage
-        if (flashMemory.length > 50) flashMemory = flashMemory.slice(0, 50);
-        localStorage.setItem('japaneseStudyApp_FlashMemory', JSON.stringify(flashMemory));
-
-        // Move the current question to the end of the queue for endless cycling
-        const currentQ = AppState.studyQueue.shift();
-        AppState.studyQueue.push(currentQ);
-
-        AppState.completedCount++;
-
-        setTimeout(() => loadNextQuestion(), 500);
-        return;
-    }
-
-    let isCorrect = false;
-    let visualTarget = null; 
-    
-    const isGroupActive = AppState.currentStudyMode === 'group' && AppState.currentCategory === 'verb';
-    if (isGroupActive) {
-        isCorrect = (submittedAnswer === currentQuestion.correctAnswer);
-        visualTarget = UI.groupBtnsContainer; 
-    } else {
-        const normalizedInput = submittedAnswer.trim().toLowerCase();
-        
-        // Split the checks so we know HOW they got it right
-        const isKanaMatch = normalizedInput === currentQuestion.correctAnswerKana || normalizedInput === currentQuestion.correctAnswerRomaji.toLowerCase();
-        const isExactKanjiMatch = currentQuestion.kanjiText && normalizedInput === currentQuestion.kanjiText;
-        
-        isCorrect = isKanaMatch || isExactKanjiMatch;
-        visualTarget = UI.answerInput;
-        
-        // Attach flags temporarily to use in the logic below
-        currentQuestion._isExactKanjiMatch = isExactKanjiMatch;
-    }
-
-    // If we are waiting for the user to type the correct word after a mistake
-    if (AppState.isCorrectionMode) {
-        if (isCorrect) {
-            flashElementColor(visualTarget, 'var(--success-color)');
-            AppState.isCorrectionMode = false;
-            
-            // Now that it's corrected, apply the re-insertion logic (4 spaces away)
-            const questionToRequeue = AppState.studyQueue.shift();
-            const requeueItem = { ...questionToRequeue, step: 1 };
-            const initialDelay = parseInt(UI.srsInitialDelay?.value, 10) || 4;
-            const insertIndex = Math.min(initialDelay, AppState.studyQueue.length);
-            AppState.studyQueue.splice(insertIndex, 0, requeueItem);
-
-            processCorrectAnswerVisuals(currentQuestion);
-        } else {
-            flashElementColor(visualTarget, 'var(--error-color)');
-        }
-        return;
-    }
-
-    // --- NEW: KANJI DRAWING MODE EVALUATION ---
-    if (AppState.isKanjiDrawingMode) {
-        if (currentQuestion._isExactKanjiMatch) { 
-            flashElementColor(visualTarget, 'var(--success-color)');
-            AppState.isKanjiDrawingMode = false;
-            
-            const questionObj = AppState.studyQueue.shift();
-            
-            // Check if this was a delayed review or a fresh intercept
-            if (questionObj.step === 'kanji_review') {
-                // They successfully reviewed the kanji. Graduate the word!
-                AppState.completedCount++;
+                processCorrectAnswerVisuals(currentQuestion);
             } else {
-                // They just intercepted it. Treat as a soft requeue for later.
-                questionObj.step = 'kanji_review'; 
+                flashElementColor(visualTarget, 'var(--error-color)');
+                setTimeout(() => { AppState.isGrading = false; }, 300);
+            }
+            return;
+        }
+
+        // --- NEW: KANJI DRAWING MODE EVALUATION ---
+        if (AppState.isKanjiDrawingMode) {
+            if (currentQuestion._isExactKanjiMatch) { 
+                flashElementColor(visualTarget, 'var(--success-color)');
+                AppState.isKanjiDrawingMode = false;
                 
-                // Use the new unified SRS setting
-                const initialDelay = parseInt(UI.srsInitialDelay?.value, 10) || 4; 
-                const insertIndex = Math.min(initialDelay, AppState.studyQueue.length);
-                AppState.studyQueue.splice(insertIndex, 0, questionObj);
+                const questionObj = AppState.studyQueue.shift();
+                
+                // Check if this was a delayed review or a fresh intercept
+                if (questionObj.step === 'kanji_review') {
+                    // They successfully reviewed the kanji. Graduate the word!
+                    AppState.completedCount++;
+                } else {
+                    // They just intercepted it. Treat as a soft requeue for later.
+                    questionObj.step = 'kanji_review'; 
+                    
+                    // Use the new unified SRS setting
+                    const initialDelay = parseInt(UI.srsInitialDelay?.value, 10) || 4; 
+                    const insertIndex = Math.min(initialDelay, AppState.studyQueue.length);
+                    AppState.studyQueue.splice(insertIndex, 0, questionObj);
+                }
+
+                processCorrectAnswerVisuals(currentQuestion);
+            } else {
+                flashElementColor(visualTarget, 'var(--error-color)');
+                setTimeout(() => { AppState.isGrading = false; }, 300);
+            }
+            return;
+        }
+
+        if (isCorrect) {
+            const hasKanji = currentQuestion.kanjiText && /[\u4e00-\u9faf]/.test(currentQuestion.kanjiText);
+            const practiceModeOn = UI.kanjiPracticeToggle && UI.kanjiPracticeToggle.checked;
+
+            // Partial Success Intercept: They typed kana, but Practice Mode wants Kanji
+            if (practiceModeOn && hasKanji && !currentQuestion._isExactKanjiMatch) {
+                AppState.isKanjiDrawingMode = true;
+                flashElementColor(visualTarget, 'var(--accent-color)'); // Blue "Info" flash
+
+                // Fetch and show SVGs
+                UI.promptText.innerHTML = `<span style="color: var(--text-secondary); font-size: 1.2rem;">Loading Stroke Order...</span>`;
+                const components = await buildKanjiPracticeData(currentQuestion.kanjiText);
+                
+                let html = `<div class="kanji-practice-container">`;
+                components.forEach(comp => {
+                    if (comp.type === 'kanji') {
+                        html += `<div class="kanji-svg-wrapper">${comp.svg}</div>`;
+                    } else {
+                        html += `<div class="kana-text-wrapper">${comp.char}</div>`;
+                    }
+                });
+                html += `</div>`;
+                html += `<div style="font-size: 1rem; color: var(--text-secondary);">${currentQuestion.promptText}</div>`;
+                
+                UI.promptText.innerHTML = html;
+                UI.answerInput.value = '';
+                UI.answerInput.focus();
+                setTimeout(() => { AppState.isGrading = false; }, 300);
+                return; // Stop here and wait for them to draw it
             }
 
+            // Full Success: Graduate the word
+            flashElementColor(visualTarget, 'var(--success-color)');
+            const currentQuestionObj = AppState.studyQueue.shift();
+            
+            if (currentQuestionObj.step === 1) {
+                currentQuestionObj.step = 2;
+                const finalDelay = parseInt(UI.srsFinalDelay?.value, 10) || 10;
+                const insertIndex = Math.min(finalDelay, AppState.studyQueue.length);
+                AppState.studyQueue.splice(insertIndex, 0, currentQuestionObj);
+            } else {
+                AppState.completedCount++;
+            }
             processCorrectAnswerVisuals(currentQuestion);
         } else {
-            flashElementColor(visualTarget, 'var(--error-color)');
+            handleIncorrectAnswer(currentQuestion, visualTarget);
         }
-        return;
-    }
-
-    if (isCorrect) {
-        const hasKanji = currentQuestion.kanjiText && /[\u4e00-\u9faf]/.test(currentQuestion.kanjiText);
-        const practiceModeOn = UI.kanjiPracticeToggle && UI.kanjiPracticeToggle.checked;
-
-        // Partial Success Intercept: They typed kana, but Practice Mode wants Kanji
-        if (practiceModeOn && hasKanji && !currentQuestion._isExactKanjiMatch) {
-            AppState.isKanjiDrawingMode = true;
-            flashElementColor(visualTarget, 'var(--accent-color)'); // Blue "Info" flash
-
-            // Fetch and show SVGs
-            UI.promptText.innerHTML = `<span style="color: var(--text-secondary); font-size: 1.2rem;">Loading Stroke Order...</span>`;
-            const components = await buildKanjiPracticeData(currentQuestion.kanjiText);
-            
-            let html = `<div class="kanji-practice-container">`;
-            components.forEach(comp => {
-                if (comp.type === 'kanji') {
-                    html += `<div class="kanji-svg-wrapper">${comp.svg}</div>`;
-                } else {
-                    html += `<div class="kana-text-wrapper">${comp.char}</div>`;
-                }
-            });
-            html += `</div>`;
-            html += `<div style="font-size: 1rem; color: var(--text-secondary);">${currentQuestion.promptText}</div>`;
-            
-            UI.promptText.innerHTML = html;
-            UI.answerInput.value = '';
-            UI.answerInput.focus();
-            return; // Stop here and wait for them to draw it
-        }
-
-        // Full Success: Graduate the word
-        flashElementColor(visualTarget, 'var(--success-color)');
-        const currentQuestionObj = AppState.studyQueue.shift();
-        
-        if (currentQuestionObj.step === 1) {
-            currentQuestionObj.step = 2;
-            const finalDelay = parseInt(UI.srsFinalDelay?.value, 10) || 10;
-            const insertIndex = Math.min(finalDelay, AppState.studyQueue.length);
-            AppState.studyQueue.splice(insertIndex, 0, currentQuestionObj);
-        } else {
-            AppState.completedCount++;
-        }
-        processCorrectAnswerVisuals(currentQuestion);
-    } else {
-        handleIncorrectAnswer(currentQuestion, visualTarget);
+    } catch (err) {
+        AppState.isGrading = false;
+        throw err;
     }
 }
 
@@ -1125,7 +1266,10 @@ function processCorrectAnswerVisuals(currentQuestion) {
 }
 
 function handleIncorrectAnswer(questionToRequeue, visualTarget) {
-    if (AppState.isCorrectionMode) return;
+    if (AppState.isCorrectionMode) {
+        setTimeout(() => { AppState.isGrading = false; }, 300);
+        return;
+    }
     
     AppState.isCorrectionMode = true;
     flashElementColor(visualTarget, 'var(--error-color)');
@@ -1157,6 +1301,8 @@ function handleIncorrectAnswer(questionToRequeue, visualTarget) {
     if (!isGroupActive && UI.audioToggleCheckbox.checked && AppState.currentStudyMode !== 'flash') {
         speakJapanese(questionToRequeue.readText);
     }
+
+    setTimeout(() => { AppState.isGrading = false; }, 300);
 }
 
 // --- UTILITIES ---
@@ -1244,6 +1390,58 @@ function renderSentenceHistory() {
     }
 }
 
+function updateDevSentenceHistory(start, end) {
+    let history = [];
+    try {
+        history = JSON.parse(localStorage.getItem('japaneseStudyApp_DevReadingHistory') || '[]');
+    } catch (e) {}
+
+    const subsetsStudied = end ? Array.from({length: end - start + 1}, (_, i) => start + i) : [start];
+    
+    subsetsStudied.forEach(subset => {
+        if (history[history.length - 1] !== subset) {
+            history.push(subset);
+        }
+    });
+
+    if (history.length > 5) history = history.slice(-5);
+
+    localStorage.setItem('japaneseStudyApp_DevReadingHistory', JSON.stringify(history));
+    renderDevSentenceHistory();
+}
+
+function renderDevSentenceHistory() {
+    if (!UI.devHistoryIndicator) return;
+    let history = [];
+    try {
+        history = JSON.parse(localStorage.getItem('japaneseStudyApp_DevReadingHistory') || '[]');
+    } catch (e) {}
+
+    if (history.length === 0) {
+        UI.devHistoryIndicator.innerHTML = `Recently studied: None`;
+    } else {
+        UI.devHistoryIndicator.innerHTML = `Recently studied: ${history.join(', ')}`;
+    }
+}
+
+function renderDevSentenceMasterList() {
+    const container = document.getElementById('master-list-dev-sentences');
+    if (!container || !AppState.devSubsets) return;
+
+    const html = [];
+    for (let i = 1; i <= AppState.devSubsets.length; i++) {
+        const isChecked = AppState.devMasteredSubsets.has(i.toString());
+        html.push(`
+            <label class="checkbox-label active-option">
+                <input type="checkbox" class="dev-mastered-subset-toggle" value="${i}" ${isChecked ? 'checked' : ''}>
+                <span class="custom-checkbox"></span>
+                Subset ${i}
+            </label>
+        `);
+    }
+    container.innerHTML = html.join('');
+}
+
 function speakJapanese(text) {
     if (!text) return;
     window.speechSynthesis.cancel(); // Stop any current speech
@@ -1292,6 +1490,10 @@ function finishSession() {
         AppState.flashTimer = null;
     }
 
+    AppState.isGrading = false;
+    clearElementFlash(UI.answerInput);
+    clearElementFlash(UI.groupBtnsContainer);
+
     if (AppState.currentStudyMode === 'flash' || AppState.currentStudyMode === 'listening') {
         const totalScore = AppState.sessionResults.reduce((sum, res) => sum + res.score, 0);
         const averageScore = AppState.sessionResults.length > 0 ? (totalScore / AppState.sessionResults.length).toFixed(1) : 0;
@@ -1325,7 +1527,12 @@ function retakeSession() {
     AppState.isCorrectionMode = false;
     AppState.isKanjiDrawingMode = false;
     AppState.activeFuriganaIndex = -1;
+    AppState.isGrading = false;
+    AppState.lastSubmitTime = 0;
     
+    clearElementFlash(UI.answerInput);
+    clearElementFlash(UI.groupBtnsContainer);
+
     // Reset the inline styles applied during the finished state
     UI.answerInput.style.display = '';
     UI.submitBtn.style.display = '';
@@ -1347,7 +1554,12 @@ function resetToSettings() {
     AppState.isCorrectionMode = false;
     AppState.isKanjiDrawingMode = false;
     AppState.activeFuriganaIndex = -1;
+    AppState.isGrading = false;
+    AppState.lastSubmitTime = 0;
     
+    clearElementFlash(UI.answerInput);
+    clearElementFlash(UI.groupBtnsContainer);
+
     UI.answerInput.style.display = '';
     UI.submitBtn.style.display = '';
     UI.groupBtnsContainer.style.display = '';
@@ -1363,16 +1575,76 @@ function resetToSettings() {
     updateLiveEstimator();
 }
 
-function flashElementColor(element, color) {
-    const originalBorder = element.style.borderColor;
+// Map tracking active flash timers and true baseline border styles per element
+const activeFlashes = new WeakMap();
+
+function isKnownFlashColor(color) {
+    if (!color) return false;
+    return (
+        color === 'var(--error-color)' ||
+        color === 'var(--success-color)' ||
+        color === 'var(--accent-color)' ||
+        color.includes('239, 68, 68') ||
+        color.includes('16, 185, 129') ||
+        color.includes('92, 138, 255')
+    );
+}
+
+function clearElementFlash(element) {
+    if (!element) return;
+    const flashInfo = activeFlashes.get(element);
+    if (flashInfo) {
+        clearTimeout(flashInfo.timerId);
+        element.style.borderColor = flashInfo.originalBorderColor;
+        element.style.borderWidth = flashInfo.originalBorderWidth;
+        element.style.borderStyle = flashInfo.originalBorderStyle;
+        if (element === UI.groupBtnsContainer && !flashInfo.originalBorderStyle) {
+            element.style.borderStyle = 'none';
+        }
+        activeFlashes.delete(element);
+    } else {
+        const currentBorder = element.style.borderColor;
+        if (isKnownFlashColor(currentBorder)) {
+            element.style.borderColor = '';
+            element.style.borderWidth = '';
+            element.style.borderStyle = (element === UI.groupBtnsContainer) ? 'none' : '';
+        }
+    }
+}
+
+function flashElementColor(element, color, duration = 400) {
+    if (!element) return;
+
+    let flashInfo = activeFlashes.get(element);
+
+    if (flashInfo) {
+        // Clear pending revert timeout so multiple rapid calls do not prematurely reset or overwrite styles
+        clearTimeout(flashInfo.timerId);
+    } else {
+        // Record baseline styles. If the element currently has a flash color, baseline must be clean ''
+        const currentBorderColor = element.style.borderColor;
+        flashInfo = {
+            originalBorderColor: isKnownFlashColor(currentBorderColor) ? '' : currentBorderColor,
+            originalBorderStyle: element.style.borderStyle,
+            originalBorderWidth: element.style.borderWidth
+        };
+    }
+
     element.style.borderColor = color;
     element.style.borderWidth = '2px';
     element.style.borderStyle = 'solid';
-    
-    setTimeout(() => {
-        element.style.borderColor = originalBorder;
-        if(element === UI.groupBtnsContainer) element.style.borderStyle = 'none';
-    }, 400);
+
+    flashInfo.timerId = setTimeout(() => {
+        element.style.borderColor = flashInfo.originalBorderColor;
+        element.style.borderWidth = flashInfo.originalBorderWidth;
+        element.style.borderStyle = flashInfo.originalBorderStyle;
+        if (element === UI.groupBtnsContainer && !flashInfo.originalBorderStyle) {
+            element.style.borderStyle = 'none';
+        }
+        activeFlashes.delete(element);
+    }, duration);
+
+    activeFlashes.set(element, flashInfo);
 }
 
 // Evaluates the user's input against the chunked components to find the error point.
@@ -1411,18 +1683,24 @@ function renderReadingSentence(japaneseText, components, activeIndex) {
             // Append any skipped characters (like punctuation) before the component
             result += remainingText.substring(0, wordIndex);
 
-            // --- DICTIONARY LOOKUP WORKAROUND ---
-            // Only lookup translation if it's not a tiny particle (length > 1 or specific kanji)
-            // This saves computation and prevents common kana like "は" or "が" from showing weird tooltips
+            // Determine tooltip translation:
+            // 1. Prioritize pre-embedded comp.english_meaning if present.
+            // 2. If comp.english_meaning is an empty string or undefined (such as for punctuation or particles), keep blank.
+            // 3. Fallback to dictionary lookup only as a safety net if english_meaning is missing entirely.
             let translation = "";
-            const isLikelyParticle = comp.type === "Particle" || (comp.word_text.length === 1 && !/[\u4E00-\u9FAF]/.test(comp.word_text));
-            
-            if (!isLikelyParticle) {
-                translation = getWordTranslation(comp.word_text, comp.word_reading);
+            if (typeof comp.english_meaning !== 'undefined') {
+                translation = comp.english_meaning ? comp.english_meaning.trim() : "";
+            } else {
+                const isLikelyParticle = comp.type === "Particle" || (comp.word_text.length === 1 && !/[\u4E00-\u9FAF]/.test(comp.word_text));
+                if (!isLikelyParticle) {
+                    translation = getWordTranslation(comp.word_text, comp.word_reading) || "";
+                }
             }
 
+            const safeTranslation = translation ? translation.replace(/"/g, '&quot;') : "";
+
             // Build the wrapper with the tooltip data attribute
-            let wordHtml = `<span class="hover-word" data-translation="${translation}">`;
+            let wordHtml = `<span class="hover-word" data-translation="${safeTranslation}">`;
 
             // Append the target component, adding Furigana if it's the active index
             if (i === activeIndex && comp.word_reading) {
@@ -1545,6 +1823,12 @@ function saveSettings() {
     settingsState['sentenceSubsetStart'] = UI.sentenceSubsetStart.value;
     settingsState['sentenceSubsetEnd'] = UI.sentenceSubsetEnd.value;
 
+    const activeDevSubsetMode = UI.settingsSection.querySelector('input[name="dev-subset-mode"]:checked');
+    if (activeDevSubsetMode) settingsState['dev-subset-mode'] = activeDevSubsetMode.value;
+
+    if (UI.devSubsetStart) settingsState['devSubsetStart'] = UI.devSubsetStart.value;
+    if (UI.devSubsetEnd) settingsState['devSubsetEnd'] = UI.devSubsetEnd.value;
+
     // Save the new SRS inputs
     if (UI.srsInitialDelay) settingsState['srsInitialDelay'] = UI.srsInitialDelay.value;
     if (UI.srsFinalDelay) settingsState['srsFinalDelay'] = UI.srsFinalDelay.value;
@@ -1588,22 +1872,155 @@ function loadSettings() {
                 UI.sentenceSubsetEndWrapper.classList.toggle('hidden', radio.value === 'single');
             }
         }
+        if (settingsState['dev-subset-mode']) {
+            const radio = UI.settingsSection.querySelector(`input[name="dev-subset-mode"][value="${settingsState['dev-subset-mode']}"]`);
+            if (radio) {
+                radio.checked = true;
+                const isSingle = radio.value === 'single';
+                if (UI.devSubsetTo) UI.devSubsetTo.classList.toggle('hidden', isSingle);
+                if (UI.devSubsetEnd) UI.devSubsetEnd.classList.toggle('hidden', isSingle);
+            }
+        }
 
         // Initialize the study mode based on whatever tab is currently active
         if (AppState.currentCategory === 'sentence') {
             AppState.currentStudyMode = UI.settingsSection.querySelector('input[name="sentence-study-mode"]:checked')?.value || 'reading';
         } else if (AppState.currentCategory === 'verb') {
             AppState.currentStudyMode = UI.settingsSection.querySelector('input[name="verb-study-mode"]:checked')?.value || 'translation';
+        } else if (AppState.currentCategory === 'dev') {
+            AppState.currentStudyMode = 'reading';
         }
         
         if (settingsState['sentenceSubsetStart']) UI.sentenceSubsetStart.value = settingsState['sentenceSubsetStart'];
         if (settingsState['sentenceSubsetEnd']) UI.sentenceSubsetEnd.value = settingsState['sentenceSubsetEnd'];
+        if (settingsState['devSubsetStart'] && UI.devSubsetStart) UI.devSubsetStart.value = settingsState['devSubsetStart'];
+        if (settingsState['devSubsetEnd'] && UI.devSubsetEnd) UI.devSubsetEnd.value = settingsState['devSubsetEnd'];
         
         // Load the new SRS inputs
         if (settingsState['srsInitialDelay'] && UI.srsInitialDelay) UI.srsInitialDelay.value = settingsState['srsInitialDelay'];
         if (settingsState['srsFinalDelay'] && UI.srsFinalDelay) UI.srsFinalDelay.value = settingsState['srsFinalDelay'];
 
         updateModeUI();
+    }
+}
+
+// --- DEV TAB CRYPTO & UNLOCK ---
+
+function base64ToUint8Array(base64) {
+    const binaryString = atob(base64);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
+}
+
+async function decryptDevData(password) {
+    if (!password) {
+        if (UI.devPasswordInput) flashElementColor(UI.devPasswordInput, 'var(--error-color)');
+        if (UI.devErrorMsg) UI.devErrorMsg.textContent = 'Please enter a password';
+        return;
+    }
+
+    if (UI.devErrorMsg) UI.devErrorMsg.textContent = '';
+    if (UI.devUnlockBtn) {
+        UI.devUnlockBtn.disabled = true;
+        UI.devUnlockBtn.textContent = 'Unlocking...';
+    }
+
+    try {
+        const resp = await fetch('sentences_dev.enc');
+        if (!resp.ok) {
+            throw new Error(`Failed to fetch sentences_dev.enc (${resp.status})`);
+        }
+
+        const encData = await resp.json();
+        const { salt, nonce, ciphertext } = encData;
+
+        if (!salt || !nonce || !ciphertext) {
+            throw new Error("Invalid encrypted file format.");
+        }
+
+        const saltBytes = base64ToUint8Array(salt);
+        const nonceBytes = base64ToUint8Array(nonce);
+        const cipherBytes = base64ToUint8Array(ciphertext);
+
+        // 1. Import password as raw key material for PBKDF2
+        const enc = new TextEncoder();
+        const keyMaterial = await window.crypto.subtle.importKey(
+            "raw",
+            enc.encode(password),
+            { name: "PBKDF2" },
+            false,
+            ["deriveKey"]
+        );
+
+        // 2. Derive 256-bit AES-GCM key using PBKDF2 (SHA-256, 100,000 iterations)
+        const aesKey = await window.crypto.subtle.deriveKey(
+            {
+                name: "PBKDF2",
+                salt: saltBytes,
+                iterations: 100000,
+                hash: "SHA-256"
+            },
+            keyMaterial,
+            { name: "AES-GCM", length: 256 },
+            false,
+            ["decrypt"]
+        );
+
+        // 3. Decrypt ciphertext using AES-GCM with nonce
+        const decryptedBuffer = await window.crypto.subtle.decrypt(
+            {
+                name: "AES-GCM",
+                iv: nonceBytes
+            },
+            aesKey,
+            cipherBytes
+        );
+
+        const dec = new TextDecoder();
+        const decryptedJson = dec.decode(decryptedBuffer);
+        const parsedData = JSON.parse(decryptedJson);
+
+        AppState.devSentenceDatabase = parsedData;
+        AppState.isDevUnlocked = true;
+
+        // Chunk devSentenceDatabase into an array of subsets of 9 sequential sentences (41 subsets of 9 + 1 remainder subset of 3 = 42 subsets)
+        const devSubsets = [];
+        for (let i = 0; i < AppState.devSentenceDatabase.length; i += 9) {
+            devSubsets.push(AppState.devSentenceDatabase.slice(i, i + 9));
+        }
+        AppState.devSubsets = devSubsets;
+
+        // Populate Mastered Subsets checklist
+        renderDevSentenceMasterList();
+
+        // Render dev reading history
+        renderDevSentenceHistory();
+
+        if (UI.devLockView) UI.devLockView.classList.add('hidden');
+        if (UI.devSettingsView) UI.devSettingsView.classList.remove('hidden');
+        if (UI.devErrorMsg) UI.devErrorMsg.textContent = '';
+        if (UI.devPasswordInput) UI.devPasswordInput.value = '';
+
+        updateLiveEstimator();
+
+    } catch (err) {
+        console.warn("Dev decryption failed:", err);
+        if (UI.devPasswordInput) {
+            flashElementColor(UI.devPasswordInput, 'var(--error-color)');
+            UI.devPasswordInput.focus();
+        }
+        if (UI.devErrorMsg) {
+            UI.devErrorMsg.textContent = 'Incorrect password';
+        }
+    } finally {
+        if (UI.devUnlockBtn) {
+            UI.devUnlockBtn.disabled = false;
+            UI.devUnlockBtn.textContent = 'Unlock';
+        }
     }
 }
 
@@ -1626,6 +2043,29 @@ UI.retakeBtn.addEventListener('click', retakeSession);
 
 UI.sentenceSubsetStart.addEventListener('input', () => { saveSettings(); updateLiveEstimator(); });
 UI.sentenceSubsetEnd.addEventListener('input', () => { saveSettings(); updateLiveEstimator(); });
+
+if (UI.devSubsetStart) {
+    UI.devSubsetStart.addEventListener('input', () => { saveSettings(); updateLiveEstimator(); });
+}
+if (UI.devSubsetEnd) {
+    UI.devSubsetEnd.addEventListener('input', () => { saveSettings(); updateLiveEstimator(); });
+}
+if (UI.devSubsetSingle) {
+    UI.devSubsetSingle.addEventListener('change', () => {
+        if (UI.devSubsetTo) UI.devSubsetTo.classList.add('hidden');
+        if (UI.devSubsetEnd) UI.devSubsetEnd.classList.add('hidden');
+        saveSettings();
+        updateLiveEstimator();
+    });
+}
+if (UI.devSubsetRange) {
+    UI.devSubsetRange.addEventListener('change', () => {
+        if (UI.devSubsetTo) UI.devSubsetTo.classList.remove('hidden');
+        if (UI.devSubsetEnd) UI.devSubsetEnd.classList.remove('hidden');
+        saveSettings();
+        updateLiveEstimator();
+    });
+}
 
 UI.flashSpeedSlider.addEventListener('input', () => {
     UI.flashSpeedNumber.value = UI.flashSpeedSlider.value;
@@ -1663,14 +2103,18 @@ UI.revealBtn.addEventListener('click', () => {
     }
 
     if (AppState.studyQueue.length > 0) {
+        if (AppState.isGrading) return;
         const isGroupActive = AppState.currentStudyMode === 'group' && AppState.currentCategory === 'verb';
         const visualTarget = isGroupActive ? UI.groupBtnsContainer : UI.answerInput;
+        AppState.isGrading = true;
         handleIncorrectAnswer(AppState.studyQueue[0], visualTarget);
     }
 });
 
-UI.answerInput.addEventListener('keypress', (e) => {
+UI.answerInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
+        if (e.isComposing || e.keyCode === 229) return;
+        e.preventDefault();
         evaluateAnswer(UI.answerInput.value);
     }
 });
@@ -1703,6 +2147,16 @@ UI.settingsSection.addEventListener('change', (e) => {
         // Handle Subset Mode Toggle (Single vs Range)
         if (e.target.name === 'subset-mode') {
             UI.sentenceSubsetEndWrapper.classList.toggle('hidden', e.target.value === 'single');
+            saveSettings();
+            updateLiveEstimator();
+            return;
+        }
+
+        // Handle Dev Subset Mode Toggle (Single vs Range)
+        if (e.target.name === 'dev-subset-mode') {
+            const isSingle = e.target.value === 'single';
+            if (UI.devSubsetTo) UI.devSubsetTo.classList.toggle('hidden', isSingle);
+            if (UI.devSubsetEnd) UI.devSubsetEnd.classList.toggle('hidden', isSingle);
             saveSettings();
             updateLiveEstimator();
             return;
@@ -1750,6 +2204,18 @@ UI.settingsSection.addEventListener('change', (e) => {
             return;
         }
 
+        // Handle Dev Mastered Subset Toggles
+        if (e.target.type === 'checkbox' && e.target.classList.contains('dev-mastered-subset-toggle')) {
+            if (e.target.checked) {
+                AppState.devMasteredSubsets.add(e.target.value);
+            } else {
+                AppState.devMasteredSubsets.delete(e.target.value);
+            }
+            saveDevMasteredSubsets();
+            updateLiveEstimator();
+            return;
+        }
+
         // Check if this change requires re-calculating subsets
         const isParentFilter = e.target.dataset.jlptTarget || 
                                e.target.dataset.groupTarget || 
@@ -1770,10 +2236,26 @@ UI.settingsSection.addEventListener('change', (e) => {
 
 UI.tabBtns.forEach(btn => {
     btn.addEventListener('click', () => {
-        const category = btn.dataset.tab.replace('tab-', '').slice(0, -1);
+        const tabKey = btn.dataset.tab.replace('tab-', '');
+        const category = tabKey === 'dev' ? 'dev' : tabKey.slice(0, -1);
         switchTab(category);
     });
 });
+
+if (UI.devUnlockBtn) {
+    UI.devUnlockBtn.addEventListener('click', () => {
+        decryptDevData(UI.devPasswordInput?.value || '');
+    });
+}
+
+if (UI.devPasswordInput) {
+    UI.devPasswordInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            decryptDevData(UI.devPasswordInput.value);
+        }
+    });
+}
 
 UI.bulkActionBtns.forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -1844,6 +2326,7 @@ async function initApp() {
         renderSubsetCheckboxes();
         // 2.5 Render Sentence History
         renderSentenceHistory();
+        renderDevSentenceHistory();
         // 3. Update estimator based on full loaded state
         updateLiveEstimator();
         // 4. Initialize WanaKana text conversion
