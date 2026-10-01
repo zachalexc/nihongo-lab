@@ -674,11 +674,18 @@
                 
                 <div class="study-actions" style="margin-top: 2rem;">
                     <button id="reveal-btn" class="btn btn-secondary">Reveal</button>
+                    <button id="skip-btn" class="btn btn-secondary" title="Skip this card without marking it correct or incorrect">Skip</button>
                     <button id="submit-btn" class="btn btn-primary">Submit</button>
                     <button id="retake-btn" class="btn btn-primary hidden">Retake Session</button>
                 </div>
             </div>
         </section>
+    </div>
+
+    <div id="stroke-order-popup" class="stroke-order-popup hidden">
+        <button id="stroke-order-close" class="stroke-order-close" title="Close">&times;</button>
+        <div id="stroke-order-content" class="stroke-order-content"></div>
+        <div id="stroke-order-caption" class="stroke-order-caption"></div>
     </div>
 
     <script src="https://unpkg.com/wanakana"></script>

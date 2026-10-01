@@ -90,6 +90,7 @@ const UI = {
     startBtn: document.getElementById('start-btn'),
     submitBtn: document.getElementById('submit-btn'),
     revealBtn: document.getElementById('reveal-btn'),
+    skipBtn: document.getElementById('skip-btn'),
     retakeBtn: document.getElementById('retake-btn'),
     answerInput: document.getElementById('answer-input'),
     groupBtnsContainer: document.getElementById('group-buttons-container'),
@@ -1233,6 +1234,36 @@ async function evaluateAnswer(submittedAnswer) {
     }
 }
 
+// Skips the current card without marking it correct or incorrect -- no SRS
+// penalty, no "completed" credit. For a bad/broken card (data error) or a
+// card the user just doesn't want to see right now. Shrinks the session
+// total along with the queue so "completed / total" still reaches 100%
+// instead of permanently falling short by one for every skipped card.
+function skipCurrentQuestion() {
+    const now = Date.now();
+    if (AppState.isGrading || (now - AppState.lastSubmitTime < 300)) return;
+    if (AppState.studyQueue.length === 0) return;
+
+    AppState.isGrading = true;
+    AppState.lastSubmitTime = now;
+
+    // Clear any transient per-question state so the next card starts fresh.
+    AppState.activeFuriganaIndex = -1;
+    AppState.isKanjiDrawingMode = false;
+    AppState.isCorrectionMode = false;
+    hideStrokeOrderPopup();
+    clearElementFlash(UI.answerInput);
+    clearElementFlash(UI.groupBtnsContainer);
+
+    AppState.studyQueue.shift();
+    if (AppState.originalTotal > 0) AppState.originalTotal--;
+
+    setTimeout(() => {
+        AppState.isGrading = false;
+        loadNextQuestion();
+    }, 150);
+}
+
 function processCorrectAnswerVisuals(currentQuestion) {
     let delay = 300; // Standard snappy delay
 
@@ -1318,21 +1349,33 @@ function getKanjiHex(char) {
     return null;
 }
 
+// In-memory cache of hex code -> SVG string (or null for a confirmed miss),
+// so repeatedly hovering/clicking the same kanji (e.g. while reading a
+// sentence) doesn't re-fetch it from GitHub every time.
+const kanjiSvgCache = {};
+
 // Fetches the raw SVG string from the KanjiVG GitHub repository.
 async function fetchKanjiVG(hexCode) {
+    if (Object.prototype.hasOwnProperty.call(kanjiSvgCache, hexCode)) {
+        return kanjiSvgCache[hexCode];
+    }
+
     const url = `https://raw.githubusercontent.com/KanjiVG/kanjivg/master/kanji/${hexCode}.svg`;
     try {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`Kanji SVG not found for hex: ${hexCode}`);
-        
+
         const rawText = await response.text();
-        
+
         // Strip XML/DOCTYPE headers by matching strictly from <svg to </svg>
         const svgMatch = rawText.match(/<svg[\s\S]*<\/svg>/i);
-        return svgMatch ? svgMatch[0] : rawText;
-        
+        const svg = svgMatch ? svgMatch[0] : rawText;
+        kanjiSvgCache[hexCode] = svg;
+        return svg;
+
     } catch (error) {
         console.warn('KanjiVG Fetch Error:', error);
+        kanjiSvgCache[hexCode] = null;
         return null;
     }
 }
@@ -1353,6 +1396,129 @@ async function buildKanjiPracticeData(wordText) {
     }
     return components;
 }
+
+// --- CLICK-TO-PRACTICE STROKE ORDER POPUP (Reading Mode) ---
+// Lets a user click any kanji-containing word in a reading-mode sentence
+// (standard or Dev Sandbox -- both render through renderReadingSentence)
+// to pop up that word's stroke order diagrams above the hover-translation,
+// so they can copy it with pen and paper without losing their place.
+
+const strokeOrderPopupEls = {
+    popup: document.getElementById('stroke-order-popup'),
+    content: document.getElementById('stroke-order-content'),
+    caption: document.getElementById('stroke-order-caption'),
+    closeBtn: document.getElementById('stroke-order-close'),
+};
+
+let activeStrokeWordEl = null;   // the .hover-word span currently showing its popup
+let strokeRequestToken = 0;      // guards against a stale async fetch overwriting a newer click
+
+function hideStrokeOrderPopup() {
+    if (!strokeOrderPopupEls.popup) return;
+    strokeOrderPopupEls.popup.classList.add('hidden');
+    if (activeStrokeWordEl) {
+        activeStrokeWordEl.classList.remove('stroke-active');
+        activeStrokeWordEl = null;
+    }
+}
+
+function positionStrokeOrderPopup(anchorEl) {
+    const popup = strokeOrderPopupEls.popup;
+    if (!popup || !anchorEl) return;
+
+    const anchorRect = anchorEl.getBoundingClientRect();
+    const popupRect = popup.getBoundingClientRect();
+    const margin = 10;
+
+    // Center over the word, clamped so it never runs off-screen horizontally.
+    let left = anchorRect.left + (anchorRect.width / 2) - (popupRect.width / 2);
+    left = Math.max(margin, Math.min(left, window.innerWidth - popupRect.width - margin));
+
+    // Prefer sitting above the word (clearing its translation tooltip space);
+    // if there isn't room, place it below the word instead.
+    let top = anchorRect.top - popupRect.height - 14;
+    if (top < margin) {
+        top = anchorRect.bottom + 14;
+    }
+
+    popup.style.left = `${left}px`;
+    popup.style.top = `${top}px`;
+}
+
+async function showStrokeOrderPopup(wordEl) {
+    const popup = strokeOrderPopupEls.popup;
+    if (!popup) return;
+
+    const wordText = wordEl.dataset.word || '';
+    const wordReading = wordEl.dataset.reading || '';
+
+    // Clicking the already-open word again just closes it (toggle).
+    if (activeStrokeWordEl === wordEl && !popup.classList.contains('hidden')) {
+        hideStrokeOrderPopup();
+        return;
+    }
+
+    if (activeStrokeWordEl) activeStrokeWordEl.classList.remove('stroke-active');
+    activeStrokeWordEl = wordEl;
+    wordEl.classList.add('stroke-active');
+
+    const myToken = ++strokeRequestToken;
+
+    strokeOrderPopupEls.content.innerHTML = `<div class="stroke-order-loading">Loading stroke order...</div>`;
+    strokeOrderPopupEls.caption.textContent = wordReading ? `${wordText} (${wordReading})` : wordText;
+    popup.classList.remove('hidden');
+    positionStrokeOrderPopup(wordEl);
+
+    const components = await buildKanjiPracticeData(wordText);
+
+    // If the user clicked a different word (or closed it) while this was
+    // in flight, drop the result rather than render it into a stale popup.
+    if (myToken !== strokeRequestToken) return;
+
+    const kanjiComponents = components.filter(c => c.type === 'kanji');
+
+    if (kanjiComponents.length === 0) {
+        strokeOrderPopupEls.content.innerHTML = `<div class="stroke-order-loading">No kanji found in this word.</div>`;
+    } else {
+        strokeOrderPopupEls.content.innerHTML = kanjiComponents.map(comp => {
+            const svg = comp.svg || `<div class="stroke-order-loading">?</div>`;
+            return `<div class="kanji-svg-wrapper">${svg}</div>`;
+        }).join('');
+    }
+
+    positionStrokeOrderPopup(wordEl);
+}
+
+// Event delegation: works for any .hover-word.has-kanji rendered anywhere
+// (standard sentence reading and Dev Sandbox reading both share this markup).
+document.addEventListener('click', (e) => {
+    const wordEl = e.target.closest('.hover-word.has-kanji');
+    if (wordEl) {
+        showStrokeOrderPopup(wordEl);
+        return;
+    }
+    // Click outside the popup and outside any clickable word closes it.
+    if (activeStrokeWordEl && !e.target.closest('.stroke-order-popup')) {
+        hideStrokeOrderPopup();
+    }
+});
+
+if (strokeOrderPopupEls.closeBtn) {
+    strokeOrderPopupEls.closeBtn.addEventListener('click', hideStrokeOrderPopup);
+}
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') hideStrokeOrderPopup();
+});
+
+// Keep the popup correctly anchored on resize/scroll instead of closing it --
+// the whole point is that it stays put while the user copies it on paper.
+window.addEventListener('resize', () => {
+    if (activeStrokeWordEl) positionStrokeOrderPopup(activeStrokeWordEl);
+});
+window.addEventListener('scroll', () => {
+    if (activeStrokeWordEl) positionStrokeOrderPopup(activeStrokeWordEl);
+}, { capture: true, passive: true });
 
 function updateSentenceHistory(start, end) {
     let history = [];
@@ -1647,6 +1813,17 @@ function flashElementColor(element, color, duration = 400) {
     activeFlashes.set(element, flashInfo);
 }
 
+// Some sentence data tokenizes punctuation (、。？！, etc.) as its own
+// component, e.g. { word_text: "、", word_reading: "、" }. The reading the
+// user types has ALL punctuation stripped before comparison (see
+// evaluateAnswer), so a non-empty reading of just "、" can never actually be
+// typed -- it must never consume a cursor position or be reportable as "the"
+// error, or it incorrectly flags the comma itself as a mistake regardless of
+// where the user's real typo (if any) is.
+function isPunctuationOnlyText(text) {
+    return !!text && /^[。、？！\.\?!,]+$/.test(text);
+}
+
 // Evaluates the user's input against the chunked components to find the error point.
 function findFirstErrorComponent(userInput, components) {
     let cursor = 0;
@@ -1656,6 +1833,7 @@ function findFirstErrorComponent(userInput, components) {
         const expectedReading = comp.word_reading;
 
         if (!expectedReading) continue; // Safety check for empty readings
+        if (isPunctuationOnlyText(comp.word_text)) continue; // Never a real "word" to get wrong
 
         if (userInput[cursor] === '-') return i;
 
@@ -1683,6 +1861,17 @@ function renderReadingSentence(japaneseText, components, activeIndex) {
             // Append any skipped characters (like punctuation) before the component
             result += remainingText.substring(0, wordIndex);
 
+            // Some sentence data tokenizes punctuation as its own component
+            // (e.g. "、" with word_reading "、"). It's not a real word -- don't
+            // make it hoverable/clickable, and never give it a furigana hint
+            // (findFirstErrorComponent already skips it when picking activeIndex,
+            // but guard here too in case activeIndex ever points at it directly).
+            if (isPunctuationOnlyText(comp.word_text)) {
+                result += comp.word_text;
+                remainingText = remainingText.substring(wordIndex + comp.word_text.length);
+                return;
+            }
+
             // Determine tooltip translation:
             // 1. Prioritize pre-embedded comp.english_meaning if present.
             // 2. If comp.english_meaning is an empty string or undefined (such as for punctuation or particles), keep blank.
@@ -1698,9 +1887,13 @@ function renderReadingSentence(japaneseText, components, activeIndex) {
             }
 
             const safeTranslation = translation ? translation.replace(/"/g, '&quot;') : "";
+            const safeWord = comp.word_text.replace(/"/g, '&quot;');
+            const safeReading = (comp.word_reading || '').replace(/"/g, '&quot;');
+            const hasKanji = /[一-龯]/.test(comp.word_text);
 
-            // Build the wrapper with the tooltip data attribute
-            let wordHtml = `<span class="hover-word" data-translation="${safeTranslation}">`;
+            // Build the wrapper with the tooltip data attribute, plus the
+            // data needed to look up stroke order on click for kanji words.
+            let wordHtml = `<span class="hover-word${hasKanji ? ' has-kanji' : ''}" data-translation="${safeTranslation}" data-word="${safeWord}" data-reading="${safeReading}">`;
 
             // Append the target component, adding Furigana if it's the active index
             if (i === activeIndex && comp.word_reading) {
@@ -2032,6 +2225,10 @@ UI.closeSessionBtn.addEventListener('click', resetToSettings);
 UI.submitBtn.addEventListener('click', () => {
     evaluateAnswer(UI.answerInput.value);
 });
+
+if (UI.skipBtn) {
+    UI.skipBtn.addEventListener('click', skipCurrentQuestion);
+}
 
 UI.groupChoiceBtns.forEach(btn => {
     btn.addEventListener('click', (e) => {

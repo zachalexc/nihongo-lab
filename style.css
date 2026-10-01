@@ -576,6 +576,80 @@ input[type="range"]::-moz-range-thumb {
     transform: translateX(-50%) translateY(0);
 }
 
+/* Words containing at least one kanji are also clickable for stroke order */
+.hover-word.has-kanji {
+    cursor: pointer;
+    border-bottom-style: solid;
+}
+
+/* While its stroke order popup is open, hide that word's own translation
+   bubble so it doesn't overlap/compete with the popup above it. */
+.hover-word.stroke-active::after,
+.hover-word.stroke-active::before {
+    opacity: 0 !important;
+    pointer-events: none;
+}
+
+/* --- Kanji Stroke Order Popup (click-to-practice) --- */
+.stroke-order-popup {
+    position: fixed;
+    z-index: 500;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.4);
+    padding: 1rem 1.25rem 0.85rem 1.25rem;
+    max-width: min(92vw, 520px);
+    text-align: center;
+}
+
+.stroke-order-popup.hidden {
+    display: none;
+}
+
+.stroke-order-close {
+    position: absolute;
+    top: 0.35rem;
+    right: 0.5rem;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 1.3rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0.25rem;
+}
+
+.stroke-order-close:hover {
+    color: var(--text-primary);
+}
+
+.stroke-order-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    padding-top: 0.25rem;
+}
+
+.stroke-order-content .kanji-svg-wrapper {
+    width: min(120px, 24vw);
+    height: min(120px, 24vw);
+}
+
+.stroke-order-content .stroke-order-loading {
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    padding: 1rem 1.5rem;
+}
+
+.stroke-order-caption {
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
 /* --- Kanji Practice Mode Visuals --- */
 .kanji-practice-container {
     display: flex;
