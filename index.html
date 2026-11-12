@@ -454,39 +454,6 @@
                     </div>
                 </div>
 
-                <div id="flash-settings-container" class="hidden">
-                    <div class="settings-group">
-                        <h3>Flash Display Mode</h3>
-                        <div class="checkbox-group">
-                            <label class="checkbox-label active-option">
-                                <input type="radio" name="flash-display-mode" value="kana" checked>
-                                <span class="custom-checkbox"></span>
-                                Kana only
-                            </label>
-                            <label class="checkbox-label active-option">
-                                <input type="radio" name="flash-display-mode" value="kanji">
-                                <span class="custom-checkbox"></span>
-                                Kanji/Furigana
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="settings-group">
-                        <h3>Flash Speed Multiplier</h3>
-                        <div style="display: flex; align-items: center; gap: 1.5rem; padding: 0.5rem 0;">
-                            <input type="range" id="flash-speed-slider" min="0.1" max="2.5" step="0.1" value="1" style="flex-grow: 1; cursor: pointer;">
-                            <input type="number" id="flash-speed-number" min="0.1" max="2.5" step="0.1" value="1" class="answer-input" style="width: 70px; text-align: center; padding: 0.5rem; font-size: 1rem;">
-                        </div>
-                    </div>
-                </div>
-
-                <div class="settings-group">
-                    <h3>Max Character Length (Kana)</h3>
-                    <div style="display: flex; align-items: center; gap: 1.5rem; padding: 0.5rem 0;">
-                        <input type="range" id="flash-length-slider" min="5" max="50" step="1" value="15" style="flex-grow: 1; cursor: pointer;">
-                        <input type="number" id="flash-length-number" min="5" max="50" step="1" value="15" class="answer-input" style="width: 70px; text-align: center; padding: 0.5rem; font-size: 1rem;">
-                    </div>
-                </div>
                 <details class="master-list-accordion">
                     <summary>Mastered Subsets (Check to Exclude)</summary>
                     <div class="checkbox-grid" id="master-list-sentences"></div>
@@ -573,6 +540,41 @@
                     </div>
                 </div>
             </div>
+            <!-- Flash / Listening settings, shown by updateModeUI -->
+            <div id="flash-settings-container" class="hidden">
+                <div class="settings-group">
+                    <h3>Flash Display Mode</h3>
+                    <div class="checkbox-group">
+                        <label class="checkbox-label active-option">
+                            <input type="radio" name="flash-display-mode" value="kana" checked>
+                            <span class="custom-checkbox"></span>
+                            Kana only
+                        </label>
+                        <label class="checkbox-label active-option">
+                            <input type="radio" name="flash-display-mode" value="kanji">
+                            <span class="custom-checkbox"></span>
+                            Kanji/Furigana
+                        </label>
+                    </div>
+                </div>
+
+                <div class="settings-group">
+                    <h3>Flash Speed Multiplier</h3>
+                    <div style="display: flex; align-items: center; gap: 1.5rem; padding: 0.5rem 0;">
+                        <input type="range" id="flash-speed-slider" min="0.1" max="2.5" step="0.1" value="1" style="flex-grow: 1; cursor: pointer;">
+                        <input type="number" id="flash-speed-number" min="0.1" max="2.5" step="0.1" value="1" class="answer-input" style="width: 70px; text-align: center; padding: 0.5rem; font-size: 1rem;">
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-group hidden" id="flash-length-settings-group">
+                <h3>Max Character Length (Kana)</h3>
+                <div style="display: flex; align-items: center; gap: 1.5rem; padding: 0.5rem 0;">
+                    <input type="range" id="flash-length-slider" min="5" max="50" step="1" value="15" style="flex-grow: 1; cursor: pointer;">
+                    <input type="number" id="flash-length-number" min="5" max="50" step="1" value="15" class="answer-input" style="width: 70px; text-align: center; padding: 0.5rem; font-size: 1rem;">
+                </div>
+            </div>
+
             <div class="settings-group" id="subset-settings-group">
                 <h3>
                     <span>Vocabulary Subsets (Sets of 10)</span>
@@ -689,6 +691,6 @@
     </div>
 
     <script src="https://unpkg.com/wanakana"></script>
-    <script src="app.js?v=1.1"></script>
+    <script src="app.js?v=1.2"></script>
 </body>
 </html>

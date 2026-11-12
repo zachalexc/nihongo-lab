@@ -162,6 +162,15 @@ function shuffleArray(array) {
     return shuffled;
 }
 
+// Mode checks shared by the tabs.
+function isGroupMode() {
+    return AppState.currentStudyMode === 'group' && AppState.currentCategory === 'verb';
+}
+function isFlashMode() {
+    return AppState.currentCategory === 'sentence' &&
+        (AppState.currentStudyMode === 'flash' || AppState.currentStudyMode === 'listening');
+}
+
 // Manages the visibility of setting sections based on the selected study mode.
 function updateModeUI() {
     const isVerbTab = AppState.currentCategory === 'verb';
@@ -178,7 +187,7 @@ function updateModeUI() {
 
     // Toggle Flash/Listening settings specifically for the Sentences category
     if (UI.flashSettingsContainer) {
-        const isFlashOrListening = AppState.currentCategory === 'sentence' && (AppState.currentStudyMode === 'flash' || AppState.currentStudyMode === 'listening');
+        const isFlashOrListening = isFlashMode();
         UI.flashSettingsContainer.classList.toggle('hidden', !isFlashOrListening);
 
         // Hide subsets specifically for Flash/Listening mode in Sentences tab
@@ -202,7 +211,7 @@ function updateModeUI() {
     if (UI.flashLengthSlider) {
         const lengthGroup = UI.flashLengthSlider.closest('.settings-group');
         if (lengthGroup) {
-            lengthGroup.classList.toggle('hidden', AppState.currentStudyMode === 'reading');
+            lengthGroup.classList.toggle('hidden', !isFlashMode());
         }
     }
 
@@ -256,85 +265,59 @@ function switchTab(category) {
 }
 
 
- // Renders the master vocabulary lists for all categories to allow word exclusion.
- 
-function renderMasterLists() {
-    const verbContainer = document.getElementById('master-list-verbs');
-    const adjContainer = document.getElementById('master-list-adjectives');
-    const nounContainer = document.getElementById('master-list-nouns');
-
-    const sections = [
-        { el: verbContainer, type: 'verb' },
-        { el: adjContainer, type: 'adjective' },
-        { el: nounContainer, type: 'noun' }
-    ];
-
-    // 1. Setup Containers with Filter Inputs
-    sections.forEach(section => {
-        if (!section.el) return;
-        section.el.innerHTML = `
-            <div style="grid-column: 1 / -1; margin-bottom: 1rem; width: 100%; display: flex; flex-direction: column; gap: 0.5rem;">
-                <input type="text" class="answer-input master-list-filter" 
-                       placeholder="Filter ${section.type}s by word or meaning..." 
-                       style="text-align: left; font-size: 1rem; padding: 0.6rem 1rem;">
-                <label class="checkbox-label kana-toggle-label" style="font-size: 0.85rem; color: var(--text-secondary); width: fit-content;">
-                    <input type="checkbox" class="kana-toggle" checked>
-                    <span class="custom-checkbox" style="width: 16px; height: 16px;"></span>
-                    Use Kana Input
-                </label>
-            </div>
-        `;
-    });
-
-    const verbHtml = [];
-    const adjHtml = [];
-    const nounHtml = [];
-
-    AppState.omniDatabase.forEach(word => {
-        const isChecked = AppState.knownWords.has(word.id);
-        const html = `
-            <label class="checkbox-label active-option">
-                <input type="checkbox" class="known-word-toggle" value="${word.id}" ${isChecked ? 'checked' : ''}>
-                <span class="custom-checkbox"></span>
-                ${word.base.kana} (${word.meaning})
+// Renders one "known words" list (check to exclude): a filter box, then one checkbox per word.
+// Used by the Verbs/Adjectives/Nouns tabs.
+function renderMasterList(container, words, label, labelFn) {
+    if (!container) return;
+    const describe = labelFn || (word => `${word.base.kana} (${word.meaning})`);
+    container.innerHTML = `
+        <div style="grid-column: 1 / -1; margin-bottom: 1rem; width: 100%; display: flex; flex-direction: column; gap: 0.5rem;">
+            <input type="text" class="answer-input master-list-filter" 
+                   placeholder="Filter ${label} by word or meaning..." 
+                   style="text-align: left; font-size: 1rem; padding: 0.6rem 1rem;">
+            <label class="checkbox-label kana-toggle-label" style="font-size: 0.85rem; color: var(--text-secondary); width: fit-content;">
+                <input type="checkbox" class="kana-toggle" checked>
+                <span class="custom-checkbox" style="width: 16px; height: 16px;"></span>
+                Use Kana Input
             </label>
-        `;
+        </div>
+    `;
+    const escape = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    container.insertAdjacentHTML('beforeend', words.map(word => `
+        <label class="checkbox-label active-option">
+            <input type="checkbox" class="known-word-toggle" value="${escape(word.id)}" ${AppState.knownWords.has(word.id) ? 'checked' : ''}>
+            <span class="custom-checkbox"></span>
+            ${escape(describe(word))}
+        </label>
+    `).join(''));
 
-        if (word.type === 'verb') verbHtml.push(html);
-        else if (word.type === 'adjective') adjHtml.push(html);
-        else if (word.type === 'noun') nounHtml.push(html);
+    const filterInput = container.querySelector('.master-list-filter');
+    const kanaToggle = container.querySelector('.kana-toggle');
+
+    // Enable Japanese IME Support
+    wanakana.bind(filterInput, { IMEMode: true });
+
+    kanaToggle.addEventListener('change', (e) => {
+        if (e.target.checked) {
+            wanakana.bind(filterInput, { IMEMode: true });
+        } else {
+            wanakana.unbind(filterInput);
+        }
     });
 
-    if (verbContainer) verbContainer.insertAdjacentHTML('beforeend', verbHtml.join(''));
-    if (adjContainer) adjContainer.insertAdjacentHTML('beforeend', adjHtml.join(''));
-    if (nounContainer) nounContainer.insertAdjacentHTML('beforeend', nounHtml.join(''));
-
-    // 2. Initialize Filtering Logic
-    document.querySelectorAll('.master-list-filter').forEach(filterInput => {
-        const kanaToggle = filterInput.parentElement.querySelector('.kana-toggle');
-
-        // Enable Japanese IME Support
-        wanakana.bind(filterInput, { IMEMode: true });
-
-        kanaToggle.addEventListener('change', (e) => {
-            if (e.target.checked) {
-                wanakana.bind(filterInput, { IMEMode: true });
-            } else {
-                wanakana.unbind(filterInput);
-            }
-        });
-
-        filterInput.addEventListener('input', (e) => {
-            const term = e.target.value.toLowerCase().trim();
-            const parentGrid = e.target.closest('.checkbox-grid');
-            const labels = parentGrid.querySelectorAll('.checkbox-label:not(.kana-toggle-label)');
-
-            labels.forEach(label => {
-                const isMatch = label.textContent.toLowerCase().includes(term);
-                label.classList.toggle('hidden', !isMatch);
-            });
+    filterInput.addEventListener('input', (e) => {
+        const term = e.target.value.toLowerCase().trim();
+        container.querySelectorAll('.checkbox-label:not(.kana-toggle-label)').forEach(lbl => {
+            lbl.classList.toggle('hidden', !lbl.textContent.toLowerCase().includes(term));
         });
     });
+}
+
+ // Renders the master vocabulary lists for all categories to allow word exclusion.
+function renderMasterLists() {
+    renderMasterList(document.getElementById('master-list-verbs'), AppState.omniDatabase.filter(w => w.type === 'verb'), 'verbs');
+    renderMasterList(document.getElementById('master-list-adjectives'), AppState.omniDatabase.filter(w => w.type === 'adjective'), 'adjectives');
+    renderMasterList(document.getElementById('master-list-nouns'), AppState.omniDatabase.filter(w => w.type === 'noun'), 'nouns');
 }
 
 // Renders the 110 Sentence Subsets into the exclusion master list.
@@ -550,7 +533,7 @@ function updateLiveEstimator() {
     }
 
     // --- VOCABULARY CATEGORY ESTIMATOR ---
-    const isGroupActive = AppState.currentStudyMode === 'group' && AppState.currentCategory === 'verb';
+    const isGroupActive = isGroupMode();
     const filteredVocab = getFilteredAndChunkedVocab();
 
     let estimatedCount = 0;
@@ -583,60 +566,117 @@ function updateLiveEstimator() {
 }
 
 
+// --- QUESTION BUILDERS ---
+// Shared by the tabs. Each takes entries in the app's own formats (data.json words,
+// sentence_data.json sentences) and returns study-queue questions.
+
+// Flash & Listening: an endless queue of sentences (sentence_data.json format), limited by the
+// Max Character Length setting, with recently seen ones moved to the back.
+function buildFlashQuestions(sentenceList) {
+    let sentences = [...sentenceList];
+    
+    // Filter out sentences longer than user-defined characters (ignoring punctuation)
+    const maxLen = parseInt(UI.flashLengthNumber.value, 10) || 15;
+    const cleanPunctuation = (str) => str.replace(/[。、？！\.\?!, ]/g, '');
+    sentences = sentences.filter(s => cleanPunctuation(s.japanese_reading).length <= maxLen);
+    
+    // Retrieve memory of recently seen cards
+    let flashMemory = [];
+    try {
+        flashMemory = JSON.parse(localStorage.getItem('japaneseStudyApp_FlashMemory') || '[]');
+    } catch (e) {}
+
+    // Shuffle all valid sentences randomly
+    sentences = shuffleArray(sentences);
+    
+    // Push recently seen sentences to the back of the queue
+    sentences.sort((a, b) => {
+        const aSeen = flashMemory.includes(a.id) ? 1 : 0;
+        const bSeen = flashMemory.includes(b.id) ? 1 : 0;
+        return aSeen - bSeen; 
+    });
+
+    // Map to the study queue format
+    const rawQuestions = sentences.map(item => {
+        const displayMode = UI.settingsSection.querySelector('input[name="flash-display-mode"]:checked')?.value || 'kana';
+        const flashContent = displayMode === 'kana' ? item.japanese_reading : item.japanese_text;
+
+        return {
+            type: 'sentence',
+            wordId: item.id,
+            flashContent: flashContent,
+            promptText: AppState.currentStudyMode === 'listening' ? `Listen and type the sentence:` : `Type the sentence you saw:`,
+            correctAnswerKana: cleanPunctuation(item.japanese_reading),
+            correctAnswerRomaji: '___NO_ROMAJI___',
+            readText: item.japanese_reading,
+            step: 0
+        };
+    });
+    
+    AppState.originalTotal = '∞';
+    return rawQuestions;
+}
+
+// Sentence reading (Sentences and Dev): one sentence in sentence_data.json format.
+function buildReadingQuestion(item, extra = {}) {
+    return Object.assign({
+        type: 'sentence',
+        wordId: item.id,
+        flashContent: item.japanese_reading,
+        components: item.components, // Pass components down
+        japaneseText: item.japanese_text, // Pass base text
+        promptText: 'Type the kana reading. Use "-" to skip a word.',
+        correctAnswerKana: item.japanese_reading.replace(/[。、？！\.\?!, ]/g, ''),
+        correctAnswerRomaji: '___NO_ROMAJI___',
+        readText: item.japanese_reading,
+        step: 0
+    }, extra);
+}
+
+// Verb group identification (Verbs tab): words in data.json format.
+function buildGroupQuestions(words) {
+    return words.map(word => {
+        const exceptionMarker = word.isException ? ' ⚠️' : '';
+        return {
+            wordId: word.id,
+            formKey: 'base', 
+            promptText: `Identify Group: <span>${word.base.kana} (${word.meaning})${exceptionMarker}</span>`,
+            correctAnswer: word.subType,
+            step: 0
+        };
+    });
+}
+
+// Meaning -> word, typed (Nouns tab): words in data.json format.
+function buildNounQuestions(words) {
+    return words.map(word => ({
+        wordId: word.id,
+        formKey: 'base',
+        promptText: `Translate: <span>${word.meaning}</span>`,
+        correctAnswerKana: word.base.kana,
+        correctAnswerRomaji: word.base.romaji,
+        readText: word.base.kana,
+        kanjiText: word.base.kanji || '',
+        step: 0
+    }));
+}
+
 // Parses settings, filters omniDatabase, and builds the study queue.
 
 function initializeSession() {
-    const isGroupActive = AppState.currentStudyMode === 'group' && AppState.currentCategory === 'verb';
+    const isGroupActive = isGroupMode();
     const isConjugationActive = AppState.currentStudyMode === 'conjugation' && AppState.currentCategory === 'verb';
     const filteredVocab = getFilteredAndChunkedVocab();
     let rawQuestions = [];
+    // Reset the "endless" marker a previous Flash/Listening session may have left behind
+    AppState.originalTotal = 0;
 
     // --- NEW SENTENCE GATHERING LOGIC ---
     if (AppState.currentCategory === 'sentence') {
         
         if (AppState.currentStudyMode === 'flash' || AppState.currentStudyMode === 'listening') {
             // --- ENDLESS FLASH / LISTENING LOGIC ---
-            let sentences = [...AppState.sentenceDatabase];
-            
-            // Filter out sentences longer than user-defined characters (ignoring punctuation)
-            const maxLen = parseInt(UI.flashLengthNumber.value, 10) || 15;
-            const cleanPunctuation = (str) => str.replace(/[。、？！\.\?!, ]/g, '');
-            sentences = sentences.filter(s => cleanPunctuation(s.japanese_reading).length <= maxLen);
-            
-            // Retrieve memory of recently seen cards
-            let flashMemory = [];
-            try {
-                flashMemory = JSON.parse(localStorage.getItem('japaneseStudyApp_FlashMemory') || '[]');
-            } catch (e) {}
-
-            // Shuffle all valid sentences randomly
-            sentences = shuffleArray(sentences);
-            
-            // Push recently seen sentences to the back of the queue
-            sentences.sort((a, b) => {
-                const aSeen = flashMemory.includes(a.id) ? 1 : 0;
-                const bSeen = flashMemory.includes(b.id) ? 1 : 0;
-                return aSeen - bSeen; 
-            });
-
-            // Map to the study queue format
-            rawQuestions = sentences.map(item => {
-                const displayMode = UI.settingsSection.querySelector('input[name="flash-display-mode"]:checked')?.value || 'kana';
-                const flashContent = displayMode === 'kana' ? item.japanese_reading : item.japanese_text;
-
-                return {
-                    type: 'sentence',
-                    wordId: item.id,
-                    flashContent: flashContent,
-                    promptText: AppState.currentStudyMode === 'listening' ? `Listen and type the sentence:` : `Type the sentence you saw:`,
-                    correctAnswerKana: cleanPunctuation(item.japanese_reading),
-                    correctAnswerRomaji: '___NO_ROMAJI___',
-                    readText: item.japanese_reading,
-                    step: 0
-                };
-            });
-            
-            AppState.originalTotal = '∞';
+            rawQuestions = buildFlashQuestions(AppState.sentenceDatabase);
 
         } else {
             // --- RANGE SELECTION LOGIC (For Reading Mode) ---
@@ -704,22 +744,7 @@ function initializeSession() {
 
             rawQuestions = selectedGroups.flatMap(group => {
                 const shuffledGroup = shuffleArray(group);
-                return shuffledGroup.map(item => {
-                    return {
-                        type: 'sentence',
-                        wordId: item.id,
-                        flashContent: item.japanese_reading,
-                        components: item.components, // Pass components down
-                        japaneseText: item.japanese_text, // Pass base text
-                        promptText: AppState.currentStudyMode === 'reading' 
-                            ? 'Type the kana reading. Use "-" to skip a word.' 
-                            : 'Type the sentence you saw:',
-                        correctAnswerKana: item.japanese_reading.replace(/[。、？！\.\?!, ]/g, ''),
-                        correctAnswerRomaji: '___NO_ROMAJI___',
-                        readText: item.japanese_reading,
-                        step: 0
-                    };
-                });
+                return shuffledGroup.map(item => buildReadingQuestion(item));
             });
         }
     } else if (AppState.currentCategory === 'dev') {
@@ -767,34 +792,13 @@ function initializeSession() {
 
         rawQuestions = selectedSubsets.flatMap(subset => {
             const shuffledSubset = shuffleArray(subset);
-            return shuffledSubset.map(item => {
-                return {
-                    type: 'sentence',
-                    wordId: item.id,
-                    flashContent: item.japanese_reading,
-                    components: item.components,
-                    japaneseText: item.japanese_text,
-                    englishTranslation: item.english_meaning || item.english || '',
-                    promptText: 'Type the kana reading. Use "-" to skip a word.',
-                    correctAnswerKana: item.japanese_reading.replace(/[。、？！\.\?!, ]/g, ''),
-                    correctAnswerRomaji: '___NO_ROMAJI___',
-                    readText: item.japanese_reading,
-                    step: 0
-                };
-            });
+            return shuffledSubset.map(item => buildReadingQuestion(item, {
+                englishTranslation: item.english_meaning || item.english || ''
+            }));
         });
     } else if (isGroupActive) {
         // --- MODE 1: Verb Group Identification ---
-        filteredVocab.forEach(word => {
-            const exceptionMarker = word.isException ? ' ⚠️' : '';
-            rawQuestions.push({
-                wordId: word.id,
-                formKey: 'base', 
-                promptText: `Identify Group: <span>${word.base.kana} (${word.meaning})${exceptionMarker}</span>`,
-                correctAnswer: word.subType,
-                step: 0
-            });
-        });
+        rawQuestions = buildGroupQuestions(filteredVocab);
     } else if (isConjugationActive) {
         // --- MODE 2: Verb Conjugation (Single Form to Form) ---
         const givenKey = UI.settingsSection.querySelector('input[name="given-form"]:checked')?.value;
@@ -824,18 +828,7 @@ function initializeSession() {
         });
     } else if (AppState.currentCategory === 'noun') {
         // --- MODE 3: Noun Translation ---
-        filteredVocab.forEach(word => {
-            rawQuestions.push({
-                wordId: word.id,
-                formKey: 'base',
-                promptText: `Translate: <span>${word.meaning}</span>`,
-                correctAnswerKana: word.base.kana,
-                correctAnswerRomaji: word.base.romaji,
-                readText: word.base.kana,
-                kanjiText: word.base.kanji || '',
-                step: 0
-            });
-        });
+        rawQuestions = buildNounQuestions(filteredVocab);
     } else {
         // --- MODE 4: Translation (Verbs/Adjectives) ---
         const activeForms = AppState.currentCategory === 'verb'
@@ -896,7 +889,7 @@ function initializeSession() {
 }
 
 function toggleUIInputs() {
-    const isGroupActive = AppState.currentStudyMode === 'group' && AppState.currentCategory === 'verb';
+    const isGroupActive = isGroupMode();
     if (isGroupActive) {
         UI.answerInput.classList.add('hidden');
         UI.submitBtn.classList.add('hidden'); 
@@ -933,7 +926,7 @@ async function loadNextQuestion() {
     }
     
     // --- FLASH & LISTENING MODE LOGIC ---
-    else if (AppState.currentCategory === 'sentence' && (AppState.currentStudyMode === 'flash' || AppState.currentStudyMode === 'listening')) {
+    else if (isFlashMode()) {
         if (AppState.currentStudyMode === 'flash') {
             // Hide input area initially
             UI.answerInput.value = '';
@@ -984,7 +977,7 @@ async function loadNextQuestion() {
         }
     } else {
         // --- STANDARD VOCAB MODE ---
-        const isGroupActive = AppState.currentStudyMode === 'group' && AppState.currentCategory === 'verb';
+        const isGroupActive = isGroupMode();
 
         if (currentQuestion.step === 'kanji_review') {
             // Auto-trigger Drawing Mode for review cards
@@ -1112,7 +1105,7 @@ async function evaluateAnswer(submittedAnswer) {
         let isCorrect = false;
         let visualTarget = null; 
         
-        const isGroupActive = AppState.currentStudyMode === 'group' && AppState.currentCategory === 'verb';
+        const isGroupActive = isGroupMode();
         if (isGroupActive) {
             isCorrect = (submittedAnswer === currentQuestion.correctAnswer);
             visualTarget = UI.groupBtnsContainer; 
@@ -1273,7 +1266,7 @@ function processCorrectAnswerVisuals(currentQuestion) {
     }
 
     // 2. Quick Reveal (Kanji Flash)
-    const isGroupActive = AppState.currentStudyMode === 'group' && AppState.currentCategory === 'verb';
+    const isGroupActive = isGroupMode();
     
     // Only flash if the toggle is checked, the mode isn't "Group", and a kanji actually exists
     if (!isGroupActive && UI.kanjiRevealToggle && UI.kanjiRevealToggle.checked && currentQuestion.kanjiText) {
@@ -1305,7 +1298,7 @@ function handleIncorrectAnswer(questionToRequeue, visualTarget) {
     AppState.isCorrectionMode = true;
     flashElementColor(visualTarget, 'var(--error-color)');
     
-    const isGroupActive = AppState.currentStudyMode === 'group' && AppState.currentCategory === 'verb';
+    const isGroupActive = isGroupMode();
     if (isGroupActive) {
         const groupMap = { 'group1': 'Group I', 'group2': 'Group II', 'group3': 'Group III' };
         UI.promptText.innerHTML += `<br><span style="color: var(--error-color); font-size: 1rem;">Correct: ${groupMap[questionToRequeue.correctAnswer]}</span>`;
@@ -2109,6 +2102,64 @@ function base64ToUint8Array(base64) {
     return bytes;
 }
 
+// Fetches an encrypted JSON file ({salt, nonce, ciphertext}, base64) and decrypts it with the password:
+// PBKDF2-SHA256 (iterations stored in the file, default 100,000) -> AES-256-GCM. Throws on a wrong password.
+// Used by the Dev tab.
+async function decryptEncFile(url, password) {
+    const resp = await fetch(url, { cache: 'no-store' });
+    if (!resp.ok) {
+        throw new Error(`Failed to fetch ${url} (${resp.status})`);
+    }
+
+    const encData = await resp.json();
+    const { salt, nonce, ciphertext } = encData;
+
+    if (!salt || !nonce || !ciphertext) {
+        throw new Error("Invalid encrypted file format.");
+    }
+
+    const saltBytes = base64ToUint8Array(salt);
+    const nonceBytes = base64ToUint8Array(nonce);
+    const cipherBytes = base64ToUint8Array(ciphertext);
+
+    // 1. Import password as raw key material for PBKDF2
+    const enc = new TextEncoder();
+    const keyMaterial = await window.crypto.subtle.importKey(
+        "raw",
+        enc.encode(password),
+        { name: "PBKDF2" },
+        false,
+        ["deriveKey"]
+    );
+
+    // 2. Derive 256-bit AES-GCM key using PBKDF2 (SHA-256). Newer files store their iteration
+    //    count; older ones (sentences_dev.enc) used 100,000.
+    const aesKey = await window.crypto.subtle.deriveKey(
+        {
+            name: "PBKDF2",
+            salt: saltBytes,
+            iterations: Number(encData.iterations) || 100000,
+            hash: "SHA-256"
+        },
+        keyMaterial,
+        { name: "AES-GCM", length: 256 },
+        false,
+        ["decrypt"]
+    );
+
+    // 3. Decrypt ciphertext using AES-GCM with nonce
+    const decryptedBuffer = await window.crypto.subtle.decrypt(
+        {
+            name: "AES-GCM",
+            iv: nonceBytes
+        },
+        aesKey,
+        cipherBytes
+    );
+
+    return JSON.parse(new TextDecoder().decode(decryptedBuffer));
+}
+
 async function decryptDevData(password) {
     if (!password) {
         if (UI.devPasswordInput) flashElementColor(UI.devPasswordInput, 'var(--error-color)');
@@ -2123,59 +2174,7 @@ async function decryptDevData(password) {
     }
 
     try {
-        const resp = await fetch('sentences_dev.enc');
-        if (!resp.ok) {
-            throw new Error(`Failed to fetch sentences_dev.enc (${resp.status})`);
-        }
-
-        const encData = await resp.json();
-        const { salt, nonce, ciphertext } = encData;
-
-        if (!salt || !nonce || !ciphertext) {
-            throw new Error("Invalid encrypted file format.");
-        }
-
-        const saltBytes = base64ToUint8Array(salt);
-        const nonceBytes = base64ToUint8Array(nonce);
-        const cipherBytes = base64ToUint8Array(ciphertext);
-
-        // 1. Import password as raw key material for PBKDF2
-        const enc = new TextEncoder();
-        const keyMaterial = await window.crypto.subtle.importKey(
-            "raw",
-            enc.encode(password),
-            { name: "PBKDF2" },
-            false,
-            ["deriveKey"]
-        );
-
-        // 2. Derive 256-bit AES-GCM key using PBKDF2 (SHA-256, 100,000 iterations)
-        const aesKey = await window.crypto.subtle.deriveKey(
-            {
-                name: "PBKDF2",
-                salt: saltBytes,
-                iterations: 100000,
-                hash: "SHA-256"
-            },
-            keyMaterial,
-            { name: "AES-GCM", length: 256 },
-            false,
-            ["decrypt"]
-        );
-
-        // 3. Decrypt ciphertext using AES-GCM with nonce
-        const decryptedBuffer = await window.crypto.subtle.decrypt(
-            {
-                name: "AES-GCM",
-                iv: nonceBytes
-            },
-            aesKey,
-            cipherBytes
-        );
-
-        const dec = new TextDecoder();
-        const decryptedJson = dec.decode(decryptedBuffer);
-        const parsedData = JSON.parse(decryptedJson);
+        const parsedData = await decryptEncFile('sentences_dev.enc', password);
 
         AppState.devSentenceDatabase = parsedData;
         AppState.isDevUnlocked = true;
@@ -2301,7 +2300,7 @@ UI.revealBtn.addEventListener('click', () => {
 
     if (AppState.studyQueue.length > 0) {
         if (AppState.isGrading) return;
-        const isGroupActive = AppState.currentStudyMode === 'group' && AppState.currentCategory === 'verb';
+        const isGroupActive = isGroupMode();
         const visualTarget = isGroupActive ? UI.groupBtnsContainer : UI.answerInput;
         AppState.isGrading = true;
         handleIncorrectAnswer(AppState.studyQueue[0], visualTarget);
