@@ -17,7 +17,8 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
-    const NEW_MODES = ['kb1-reading-typed', 'kb1-reading-mc', 'kb1-meaning-mc', 'kb1-kanji'];
+    const NEW_MODES = ['kb1-reading-typed', 'kb1-reading-mc', 'kb1-meaning-mc', 'kb1-kanji',
+                       'kb1-which-typed', 'kb1-which-mc', 'kb1-special-typed', 'kb1-special-mc', 'kb1-exam'];
     const SENTENCE_MODES = ['reading'];
 
     function shuffle(array, rng = Math.random) {
@@ -242,7 +243,9 @@
         const kun = taught(k, 'kun').map(e => e.label).join('・') || 'なし';
         const on = taught(k, 'on').map(e => e.label).join('・');
         const sp = (k.kb1.special_readings || []).map(x => `${x.reading}（${x.words.join('、')}）`).join('・');
-        const ex = (k.kb1.examples || []).map(([w, r]) => `${escapeHtml(w)}<span class="kb1-ex-r">（${escapeHtml(r)}）</span>`).join('、');
+        const ex = (k.kb1.examples || []).map(([w, r, , , inClass]) =>
+            `${escapeHtml(w)}<span class="kb1-ex-r">（${escapeHtml(r)}）</span>` +
+            (inClass === false ? '<span class="kb1-extra-tag">extra</span>' : '')).join('、');
         return `<div class="kb1-info" lang="ja"><b>${escapeHtml(k.base.kanji)}</b>　訓: ${escapeHtml(kun)}　／　音: ${escapeHtml(on)}` +
             (sp ? `　／　特別: ${escapeHtml(sp)}` : '') + `<br><span class="kb1-ex">${ex}</span>` +
             `<span class="kb1-meaning"> · ${escapeHtml(k.meaning)}</span></div>`;
@@ -258,6 +261,189 @@
             if (i >= 0) used[i] = true; else stray.push(t);
         }
         return { used, stray };
+    }
+
+    // ---- which reading is used: one kanji highlighted in a class word ---------------------
+    // Uses the word's per-kanji reading split; parts marked 'special' (熟字訓) are never asked.
+    function whichItems(words, kanjiByChar) {
+        const items = [];
+        for (const w of words) {
+            const parts = w.kb1.split || [];
+            parts.forEach((part, i) => {
+                const [text, reading, type] = part;
+                if ((type === 'on' || type === 'kun') && text.length === 1 && kanjiByChar.has(text)) {
+                    items.push({ word: w, index: i });
+                }
+            });
+        }
+        return items;
+    }
+
+    function highlightPart(w, index) {
+        return w.kb1.split.map(([t], i) => i === index ? `<span class="kb1-hl">${escapeHtml(t)}</span>` : escapeHtml(t)).join('');
+    }
+
+    function whichQuestion(item, kanjiByChar, mc, rng) {
+        const w = item.word, [ch, reading, type] = w.kb1.split[item.index];
+        const k = kanjiByChar.get(ch);
+        // what follows the kanji in kana (okurigana): いきる is accepted for 生 in 生きる
+        let tail = '';
+        for (let j = item.index + 1; j < w.kb1.split.length && w.kb1.split[j][2] === 'kana'; j++) tail += w.kb1.split[j][1];
+        const q = {
+            kb1: true, qtype: mc ? 'which-mc' : 'which-typed', wordId: `${w.id}:${item.index}`, sourceWordId: w.id,
+            kanjiId: k.id, formKey: 'base', step: 0, kanjiText: '', readText: w.base.kana,
+            revealText: w.base.kanji, revealMeaning: w.meaning, correctAnswerRomaji: '___NO_ROMAJI___',
+            correctAnswerKana: reading, partType: type, askedKanji: ch, steps: w.kb1.steps,
+            acceptAnswers: tail ? [reading + tail] : [],
+            promptText: `<div class="kb1-word" lang="ja">${highlightPart(w, item.index)}</div>` +
+                `<div class="kb1-instruction">How is <span class="kb1-inline" lang="ja">${escapeHtml(ch)}</span> read in this word?` +
+                (mc ? '' : ' Type it in hiragana') + '</div>',
+        };
+        if (mc) {
+            const all = [...taught(k, 'on'), ...taught(k, 'kun')].flatMap(e => e.forms.map(stripParens));
+            // then near-miss sounds, then readings of other kanji from the same Step
+            const sameStep = shuffle([...kanjiByChar.values()].filter(o => o !== k && o.kb1.steps[0] === k.kb1.steps[0]), rng)
+                .flatMap(o => taught(o, type).map(e => stripParens(e.forms[0])));
+            const pool = [...shuffle(all, rng), ...nearMisses(reading), ...sameStep];
+            const wrong = [];
+            for (const c of pool) {
+                if (wrong.length >= 3) break;
+                if (c && c !== reading && !wrong.includes(c) && c !== reading + tail) wrong.push(c);
+            }
+            q.choices = shuffle([reading, ...wrong], rng);
+            q.choicesLang = 'ja';
+            q.correctAnswer = reading;
+        }
+        return q;
+    }
+
+    // ---- ※ special readings (熟字訓 and irregular words) ---------------------------------
+    function specialWords(data, opts) {
+        const steps = new Set(opts.steps);
+        return data.vocabulary.filter(w => w.type !== 'kanji' && w.kb1.special &&
+            w.kb1.steps.some(s => steps.has(s)) && !(opts.exclude && opts.exclude.has(w.id)));
+    }
+
+    function specialQuestion(w, mc, rng) {
+        const extraTag = w.kb1.in_class ? '' : ' <span class="kb1-extra-tag">extra</span>';
+        if (!mc) {
+            const q = readingTyped(w);
+            q.qtype = 'special-typed';
+            q.promptText = q.promptText.replace('</div><div class="kb1-instruction">', `${extraTag}</div><div class="kb1-instruction">※ special reading — `);
+            return q;
+        }
+        const regular = (w.kb1.d_regular || []).filter(x => x !== w.base.kana);
+        const others = (w.kb1.d_reading || []).filter(x => x !== w.base.kana && !regular.includes(x));
+        const wrong = [...shuffle(regular, rng).slice(0, 2), ...shuffle(others, rng)].slice(0, 3);
+        return Object.assign(base(w, 'special-mc'), {
+            promptText: wordPrompt(w, '※ special reading — choose the reading').replace('</div><div', `${extraTag}</div><div`),
+            choices: shuffle([w.base.kana, ...wrong], rng), choicesLang: 'ja', correctAnswer: w.base.kana,
+        });
+    }
+
+    // ---- mock exam ------------------------------------------------------------------
+    const EXAM_TYPES = {
+        'w-typed':  "Word → reading (type)",
+        'w-mc':     "Word → reading (choose)",
+        'w-meaning':"Word → meaning",
+        'k-typed':  "On'yomi / kun'yomi (type)",
+        'k-mc':     "On'yomi / kun'yomi (choose)",
+        'k-onkun':  "On'yomi or kun'yomi?",
+        'which':    "Which reading is used",
+        'special':  "※ Special readings",
+    };
+
+    // Questions spread over the chosen Steps in proportion to their handout words; the type of
+    // each question is picked at random from the chosen types that have something left to ask.
+    function buildExam(src, opts, rng = Math.random) {
+        const count = Math.max(1, opts.examCount || 50);
+        const types = (opts.examTypes && opts.examTypes.length) ? opts.examTypes : Object.keys(EXAM_TYPES);
+        const kanjiByChar = new Map((src.kanjiAll || []).map(k => [k.base.kanji, k]));
+        const stepOf = x => x.kb1.steps[0];
+        const share = {};
+        for (const w of src.words) if (w.kb1.in_class) share[stepOf(w)] = (share[stepOf(w)] || 0) + 1;
+        const steps = opts.steps.filter(st => share[st]);
+        const total = steps.reduce((a, st) => a + share[st], 0);
+        // largest-remainder allocation of `count` over the Steps
+        const exact = steps.map(st => count * share[st] / total);
+        const alloc = exact.map(Math.floor);
+        let left = count - alloc.reduce((a, b) => a + b, 0);
+        exact.map((x, i) => [x - alloc[i], i]).sort((a, b) => b[0] - a[0]).slice(0, left).forEach(([, i]) => alloc[i]++);
+
+        const out = [];
+        steps.forEach((st, si) => {
+            const pools = {
+                'w-typed': shuffle(src.words.filter(w => stepOf(w) === st), rng),
+                'w-mc': shuffle(src.words.filter(w => stepOf(w) === st), rng),
+                'w-meaning': shuffle(src.words.filter(w => stepOf(w) === st), rng),
+                'k-typed': shuffle((src.kanji || []).filter(k => stepOf(k) === st).flatMap(k => [[k, 'on'], [k, 'kun']]), rng),
+                'k-mc': shuffle((src.kanji || []).filter(k => stepOf(k) === st).flatMap(k => [[k, 'on'], [k, 'kun']]), rng),
+                'k-onkun': shuffle((src.kanji || []).filter(k => stepOf(k) === st), rng),
+                'which': shuffle(whichItems(src.words.filter(w => stepOf(w) === st), kanjiByChar), rng),
+                'special': shuffle((src.special || []).filter(w => stepOf(w) === st && (w.kb1.in_class || opts.includeExtra)), rng),
+            };
+            const usedWords = new Set();
+            for (let n = 0; n < alloc[si]; n++) {
+                const open = types.filter(t => pools[t] && pools[t].length);
+                if (!open.length) break;
+                const t = open[Math.floor(rng() * open.length)];
+                let q = null;
+                while (pools[t].length && !q) {
+                    const it = pools[t].pop();
+                    const key = t.startsWith('k-') ? (Array.isArray(it) ? it[0].id + it[1] : it.id) + t
+                        : t === 'which' ? it.word.id : it.id;
+                    if (usedWords.has(key)) continue;
+                    usedWords.add(key);
+                    if (t === 'w-typed') q = readingTyped(it);
+                    else if (t === 'w-mc') q = readingChoice(it, rng);
+                    else if (t === 'w-meaning') q = meaningChoice(it, rng);
+                    else if (t === 'k-typed') q = kanjiTyped(it[0], it[1]);
+                    else if (t === 'k-mc') q = kanjiChoice(it[0], it[1], src.kanji, rng);
+                    else if (t === 'k-onkun') q = kanjiOnOrKun(it, rng);
+                    else if (t === 'which') q = whichQuestion(it, kanjiByChar, rng() < 0.5, rng);
+                    else if (t === 'special') q = specialQuestion(it, rng() < 0.5, rng);
+                }
+                if (q) { q.examType = t; q.examStep = st; out.push(q); }
+            }
+        });
+        return shuffle(out, rng);
+    }
+
+    // Results: overall, by Step, by type, and every miss.
+    function examResultsHtml(records, lookupKanji) {
+        const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
+        const right = records.filter(r => r.correct).length;
+        const group = key => {
+            const m = new Map();
+            for (const r of records) {
+                const k = key(r); const g = m.get(k) || [0, 0];
+                g[0] += r.correct ? 1 : 0; g[1]++; m.set(k, g);
+            }
+            return [...m.entries()];
+        };
+        const row = (label, [a, b]) => `<tr><td>${label}</td><td>${a} / ${b}</td><td>${pct(a, b)}%</td></tr>`;
+        const bySteps = group(r => r.q.examStep).sort((a, b) => a[0] - b[0]).map(([k, g]) => row(`Step ${k}`, g)).join('');
+        const byTypes = group(r => r.q.examType).map(([k, g]) => row(escapeHtml(EXAM_TYPES[k] || k), g)).join('');
+        const misses = records.filter(r => !r.correct).map(r => {
+            const q = r.q;
+            const isKanji = q.qtype.startsWith('kanji-');
+            const k = isKanji && lookupKanji ? lookupKanji(q.kanjiId) : null;
+            const what = q.qtype.startsWith('which') ? `${escapeHtml(q.askedKanji)} in ${escapeHtml(q.revealText)}` : escapeHtml(q.revealText);
+            const correct = q.qtype === 'kanji-onkun' ? `${escapeHtml(q.asked)} = ${q.kind === 'on' ? "on'yomi" : "kun'yomi"}` : escapeHtml(q.correctAnswer || q.correctAnswerKana);
+            const detail = k ? `訓: ${escapeHtml(taught(k, 'kun').map(e => e.label).join('・') || 'なし')} ／ 音: ${escapeHtml(taught(k, 'on').map(e => e.label).join('・'))}`
+                : `${escapeHtml(q.readText || '')} · ${escapeHtml(q.revealMeaning || '')}`;
+            return `<tr><td lang="ja">${what}</td><td>${escapeHtml(EXAM_TYPES[q.examType] || '')}</td>` +
+                `<td lang="ja">${r.answer == null || r.answer === '' ? '<i>skipped</i>' : escapeHtml(r.answer)}</td>` +
+                `<td lang="ja">${correct}</td><td lang="ja">${detail}</td></tr>`;
+        }).join('');
+        return `<div class="kb1-results">
+            <div class="kb1-score">${right} / ${records.length} <span>(${pct(right, records.length)}%)</span></div>
+            <div class="kb1-results-tables">
+              <table><thead><tr><th>Step</th><th>Score</th><th></th></tr></thead><tbody>${bySteps}</tbody></table>
+              <table><thead><tr><th>Question type</th><th>Score</th><th></th></tr></thead><tbody>${byTypes}</tbody></table>
+            </div>
+            ${misses ? `<h4>Misses</h4><div class="kb1-misses"><table><thead><tr><th>Question</th><th>Type</th><th>Your answer</th><th>Correct</th><th>Reading · meaning</th></tr></thead><tbody>${misses}</tbody></table></div>` : '<p>No misses — well done!</p>'}
+        </div>`;
     }
 
     // ---- grading: one function for every class question -----------------------------
@@ -295,6 +481,16 @@
             return ok(c, `<div class="kb1-answer">${parts}${extra}</div>${info}`);
         }
 
+        // which reading: typed or chosen; feedback = the word + the kanji's taught readings
+        if (q.qtype && q.qtype.startsWith('which-')) {
+            const c = given !== null && (q.choices ? given === q.correctAnswer
+                : (toHira(given) === q.correctAnswerKana || (q.acceptAnswers || []).includes(toHira(given))));
+            const k = lookupKanji ? lookupKanji(q.kanjiId) : null;
+            return ok(c, `<div class="kb1-answer">${mark(c)} <span lang="ja">${escapeHtml(q.correctAnswerKana)}</span> ` +
+                `(${q.partType === 'on' ? "on'yomi" : "kun'yomi"}) — <span lang="ja">${escapeHtml(q.revealText)}</span> = ` +
+                `<span lang="ja">${escapeHtml(q.readText)}</span> · ${escapeHtml(q.revealMeaning)}</div>` + (k ? kanjiInfoHtml(k) : ''));
+        }
+
         // words: choices, or typed reading / meaning -> word
         let c;
         if (given === null) c = false;
@@ -320,6 +516,13 @@
         if (mode === 'kb1-reading-mc') return words.map(w => readingChoice(w, rng));
         if (mode === 'kb1-meaning-mc') return words.map(w => meaningChoice(w, rng));
         if (mode === 'kb1-kanji') return kanjiQuestions(src.kanji || [], opts.kanjiTypes || KANJI_TYPES, rng);
+        if (mode === 'kb1-which-typed' || mode === 'kb1-which-mc') {
+            const byChar = new Map((src.kanjiAll || []).map(k => [k.base.kanji, k]));
+            return whichItems(words, byChar).map(it => whichQuestion(it, byChar, mode === 'kb1-which-mc', rng));
+        }
+        if (mode === 'kb1-special-typed') return (src.special || []).map(w => specialQuestion(w, false, rng));
+        if (mode === 'kb1-special-mc') return (src.special || []).map(w => specialQuestion(w, true, rng));
+        if (mode === 'kb1-exam') return buildExam(src, opts, rng);
         return [];
     }
 
@@ -328,6 +531,12 @@
         if (!opts.steps.length) return 0;
         if (SENTENCE_MODES.includes(mode)) return selectSentences(data, opts).length;
         if (mode === 'kb1-kanji') return selectKanji(data, opts).length * (opts.kanjiTypes || KANJI_TYPES).length;
+        if (mode === 'kb1-which-typed' || mode === 'kb1-which-mc') {
+            const byChar = new Map(data.vocabulary.filter(k => k.type === 'kanji').map(k => [k.base.kanji, k]));
+            return whichItems(selectWords(data, opts), byChar).length;
+        }
+        if (mode === 'kb1-special-typed' || mode === 'kb1-special-mc') return specialWords(data, opts).length;
+        if (mode === 'kb1-exam') return opts.examCount || 50;
         return selectWords(data, opts).length;
     }
 
@@ -336,5 +545,6 @@
     return { NEW_MODES, SENTENCE_MODES, KANJI_TYPES, NONE_LABEL, shuffle, escapeHtml, hasKatakana,
              selectWords, selectSentences, selectKanji, readingTyped, readingChoice, meaningChoice,
              kanjiTyped, kanjiChoice, kanjiOnOrKun, kanjiQuestions, kanjiInfoHtml, taught,
+             whichItems, whichQuestion, specialWords, specialQuestion, EXAM_TYPES, buildExam, examResultsHtml,
              grade, buildQueue, estimate, checkTyped };
 });

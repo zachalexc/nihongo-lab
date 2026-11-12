@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Japanese Study App</title>
-    <link rel="stylesheet" href="style.css?v=1.4">
+    <link rel="stylesheet" href="style.css?v=1.5">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         /* UI Lab Theme Overrides */
@@ -583,6 +583,26 @@
                                     <span class="custom-checkbox"></span>
                                     Kanji readings (音読み・訓読み)
                                 </label>
+                                <label class="checkbox-label active-option">
+                                    <input type="radio" name="kb1-mode" value="kb1-which-typed">
+                                    <span class="custom-checkbox"></span>
+                                    Which reading is used (type it)
+                                </label>
+                                <label class="checkbox-label active-option">
+                                    <input type="radio" name="kb1-mode" value="kb1-which-mc">
+                                    <span class="custom-checkbox"></span>
+                                    Which reading is used (choose)
+                                </label>
+                                <label class="checkbox-label active-option">
+                                    <input type="radio" name="kb1-mode" value="kb1-special-typed">
+                                    <span class="custom-checkbox"></span>
+                                    ※ Special readings (type it)
+                                </label>
+                                <label class="checkbox-label active-option">
+                                    <input type="radio" name="kb1-mode" value="kb1-special-mc">
+                                    <span class="custom-checkbox"></span>
+                                    ※ Special readings (choose)
+                                </label>
                         </div>
                         <div id="kb1-kanji-options" class="hidden">
                             <div class="kb1-mode-label">Kanji question types (taught readings only)</div>
@@ -612,6 +632,68 @@
                                 <span class="custom-checkbox"></span>
                                 On'yomi or kun'yomi?
                             </label>
+                            </div>
+                        </div>
+                        <div class="kb1-mode-label">Mock exam</div>
+                        <div class="checkbox-group">
+                                <label class="checkbox-label active-option">
+                                    <input type="radio" name="kb1-mode" value="kb1-exam">
+                                    <span class="custom-checkbox"></span>
+                                    Mock exam (no feedback until the end)
+                                </label>
+                        </div>
+                        <div id="kb1-exam-options" class="hidden">
+                            <div class="kb1-exam-row">
+                                <label>Questions <input type="number" id="kb1-exam-count" class="answer-input kb1-num" min="5" max="200" step="5" value="50"></label>
+                                <label class="checkbox-label active-option">
+                                    <input type="checkbox" id="kb1-exam-timer">
+                                    <span class="custom-checkbox"></span>
+                                    Timer
+                                </label>
+                                <label>Minutes <input type="number" id="kb1-exam-minutes" class="answer-input kb1-num" min="1" max="180" value="50"></label>
+                            </div>
+                            <div class="kb1-mode-label">Question types in the exam</div>
+                            <div class="checkbox-group">
+                                <label class="checkbox-label active-option">
+                                    <input type="checkbox" id="kb1-exam-w-typed" data-kb1-exam-type="w-typed" checked>
+                                    <span class="custom-checkbox"></span>
+                                    Word → reading (type)
+                                </label>
+                                <label class="checkbox-label active-option">
+                                    <input type="checkbox" id="kb1-exam-w-mc" data-kb1-exam-type="w-mc" checked>
+                                    <span class="custom-checkbox"></span>
+                                    Word → reading (choose)
+                                </label>
+                                <label class="checkbox-label active-option">
+                                    <input type="checkbox" id="kb1-exam-w-meaning" data-kb1-exam-type="w-meaning" checked>
+                                    <span class="custom-checkbox"></span>
+                                    Word → meaning
+                                </label>
+                                <label class="checkbox-label active-option">
+                                    <input type="checkbox" id="kb1-exam-k-typed" data-kb1-exam-type="k-typed" checked>
+                                    <span class="custom-checkbox"></span>
+                                    On'yomi / kun'yomi (type)
+                                </label>
+                                <label class="checkbox-label active-option">
+                                    <input type="checkbox" id="kb1-exam-k-mc" data-kb1-exam-type="k-mc" checked>
+                                    <span class="custom-checkbox"></span>
+                                    On'yomi / kun'yomi (choose)
+                                </label>
+                                <label class="checkbox-label active-option">
+                                    <input type="checkbox" id="kb1-exam-k-onkun" data-kb1-exam-type="k-onkun" checked>
+                                    <span class="custom-checkbox"></span>
+                                    On'yomi or kun'yomi?
+                                </label>
+                                <label class="checkbox-label active-option">
+                                    <input type="checkbox" id="kb1-exam-which" data-kb1-exam-type="which" checked>
+                                    <span class="custom-checkbox"></span>
+                                    Which reading is used
+                                </label>
+                                <label class="checkbox-label active-option">
+                                    <input type="checkbox" id="kb1-exam-special" data-kb1-exam-type="special" checked>
+                                    <span class="custom-checkbox"></span>
+                                    ※ Special readings
+                                </label>
                             </div>
                         </div>
                         <div class="kb1-mode-label">App modes on class content</div>
@@ -826,6 +908,7 @@
                     <button id="skip-btn" class="btn btn-secondary" title="Skip this card without marking it correct or incorrect">Skip</button>
                     <button id="submit-btn" class="btn btn-primary">Submit</button>
                     <button id="retake-btn" class="btn btn-primary hidden">Retake Session</button>
+                    <button id="kb1-practise-btn" class="btn btn-primary hidden">Practise my misses</button>
                 </div>
             </div>
         </section>
@@ -838,8 +921,8 @@
     </div>
 
     <script src="https://unpkg.com/wanakana"></script>
-    <script src="kb1_core.js?v=1.2"></script>
-    <script src="kb1.js?v=1.2"></script>
-    <script src="app.js?v=1.4"></script>
+    <script src="kb1_core.js?v=1.3"></script>
+    <script src="kb1.js?v=1.3"></script>
+    <script src="app.js?v=1.5"></script>
 </body>
 </html>

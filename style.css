@@ -790,3 +790,29 @@ input[type="range"]::-moz-range-thumb {
 .prompt-text .kb1-feedback .kb1-meaning { color: var(--text-secondary); font-size: 0.9em; }
 #kb1-none-btn { margin-top: 0.75rem; }
 .choice-grid.answered .choice-btn { cursor: default; }
+/* which-reading highlight, extra label */
+.prompt-text .kb1-word .kb1-hl, .kb1-hl {
+    display: inline; font-size: inherit; margin: 0;
+    color: var(--text-primary); background: rgba(92, 138, 255, 0.35);
+    border-radius: 6px; padding: 0 0.1em;
+}
+.prompt-text .kb1-extra-tag, .kb1-extra-tag {
+    display: inline-block; font-size: 0.7rem; font-weight: 600; margin: 0 0 0 0.3em;
+    padding: 0.05em 0.45em; border-radius: 999px; vertical-align: middle;
+    color: var(--text-secondary); border: 1px solid var(--border-color);
+}
+/* mock exam */
+.kb1-exam-row { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 0.5rem 0; color: var(--text-secondary); font-size: 0.9rem; }
+.kb1-exam-row label { display: flex; align-items: center; gap: 0.5rem; }
+.kb1-num { width: 80px; padding: 0.4rem; font-size: 1rem; text-align: center; }
+.kb1-results { text-align: left; font-size: 0.95rem; color: var(--text-primary); }
+.kb1-score { font-size: 2.2rem; text-align: center; color: var(--accent-color); margin-bottom: 1rem; }
+.prompt-text .kb1-score span { display: inline; font-size: 1.2rem; color: var(--text-secondary); margin: 0; }
+.kb1-results-tables { display: flex; flex-wrap: wrap; gap: 1.5rem; justify-content: center; margin-bottom: 1rem; }
+.kb1-results table { border-collapse: collapse; font-size: 0.9rem; font-weight: 400; }
+.kb1-results th, .kb1-results td { padding: 0.3rem 0.6rem; border-bottom: 1px solid var(--border-color); text-align: left; vertical-align: top; }
+.kb1-results th { color: var(--text-secondary); font-weight: 600; }
+.kb1-results h4 { margin: 1rem 0 0.5rem; font-size: 1rem; }
+.kb1-misses { max-height: 50vh; overflow: auto; }
+.kb1-results i { color: var(--text-secondary); }
+.study-card.kb1-wide { max-width: min(960px, 96vw); width: 100%; }

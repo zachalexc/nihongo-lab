@@ -46,6 +46,7 @@ const AppState = {
     lastSubmitTime: 0,
     isDevUnlocked: false,
     pendingNext: null,        // 漢字基礎１: feedback is showing; Enter / Next runs this to move on
+    exam: null,               // 漢字基礎１ mock exam: { records, endsAt, timerId } while one is running
     devMasteredSubsets: new Set()
 };
 
@@ -114,6 +115,7 @@ const UI = {
     tabKb1: document.getElementById('tab-kb1'),
     choiceBtnsContainer: document.getElementById('choice-buttons-container'),
     kb1NoneBtn: document.getElementById('kb1-none-btn'),
+    kb1PractiseBtn: document.getElementById('kb1-practise-btn'),
     devLockView: document.getElementById('dev-lock-view'),
     devSettingsView: document.getElementById('dev-settings-view'),
     devPasswordInput: document.getElementById('dev-password-input'),
@@ -695,6 +697,7 @@ function initializeSession() {
         else if (mode === 'reading') rawQuestions = src.sentences.map(s => buildReadingQuestion(s, {
             englishTranslation: s.english_translation, showTranslation: true }));
         else rawQuestions = KB1Core.buildQueue(src, mode, src.opts);
+        startExamState(mode === 'kb1-exam' ? src.opts : null);
     } else
     // --- NEW SENTENCE GATHERING LOGIC ---
     if (AppState.currentCategory === 'sentence') {
@@ -977,6 +980,10 @@ async function loadNextQuestion() {
         UI.answerInput.readOnly = false;
         if (UI.kb1NoneBtn) UI.kb1NoneBtn.classList.toggle('hidden', !currentQuestion.allowNone);
         if (isChoice) renderChoiceButtons(currentQuestion);
+        if (AppState.exam) {             // exam: no Reveal; typed answers go with Next
+            UI.revealBtn.classList.add('hidden');
+            UI.submitBtn.textContent = 'Next →';
+        }
     } else if (UI.kb1NoneBtn) {
         UI.kb1NoneBtn.classList.add('hidden');
     }
@@ -1334,6 +1341,13 @@ async function evaluateAnswer(submittedAnswer) {
 // Shows the result and the full answer, then waits; the queue moves on only when the user says so.
 function gradeClassQuestion(question, submittedAnswer) {
     const result = KB1Core.grade(question, submittedAnswer, findWordById);
+    if (AppState.exam) {                 // mock exam: no feedback, just record and move on
+        AppState.exam.records.push({ q: question, answer: submittedAnswer, correct: result.correct });
+        AppState.studyQueue.shift();
+        AppState.completedCount++;
+        loadNextQuestion();
+        return;
+    }
     const target = question.choices ? UI.choiceBtnsContainer : UI.answerInput;
     flashElementColor(target, result.correct ? 'var(--success-color)' : 'var(--error-color)');
     if (question.choices) {
@@ -1360,6 +1374,70 @@ function gradeClassQuestion(question, submittedAnswer) {
         }
         loadNextQuestion();
     });
+}
+
+// --- 漢字基礎１ mock exam ---
+function startExamState(opts) {
+    stopExamTimer();
+    AppState.exam = null;
+    if (!opts) return;
+    AppState.exam = { records: [], endsAt: opts.examMinutes ? Date.now() + opts.examMinutes * 60000 : 0, timerId: null };
+    if (AppState.exam.endsAt) {
+        AppState.exam.timerId = setInterval(() => {
+            if (!AppState.exam) return;
+            if (Date.now() >= AppState.exam.endsAt) finishSession();
+            else updateCounter();
+        }, 1000);
+    }
+}
+
+function stopExamTimer() {
+    if (AppState.exam && AppState.exam.timerId) clearInterval(AppState.exam.timerId);
+}
+
+function examTimeLeft() {
+    if (!AppState.exam || !AppState.exam.endsAt) return '';
+    const s = Math.max(0, Math.round((AppState.exam.endsAt - Date.now()) / 1000));
+    return ` · ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function showExamResults() {
+    const exam = AppState.exam;
+    stopExamTimer();
+    // anything not reached (time ran out) counts as unanswered
+    AppState.studyQueue.forEach(q => exam.records.push({ q, answer: null, correct: false }));
+    AppState.studyQueue = [];
+    const misses = exam.records.filter(r => !r.correct).map(r => Object.assign({}, r.q, { step: 0 }));
+    const timeUp = exam.endsAt && Date.now() >= exam.endsAt;
+    UI.studySection.querySelector('.study-card')?.classList.add('kb1-wide');
+    UI.promptText.innerHTML = (timeUp ? '<div class="kb1-instruction">Time is up.</div>' : '') +
+        KB1Core.examResultsHtml(exam.records, findWordById);
+    const right = exam.records.filter(r => r.correct).length;
+    UI.sessionCounter.textContent = `${right} / ${exam.records.length}`;
+    AppState.exam = null;
+    UI.answerInput.style.display = 'none';
+    UI.submitBtn.style.display = 'none';
+    UI.skipBtn.classList.add('hidden');
+    if (UI.choiceBtnsContainer) UI.choiceBtnsContainer.classList.add('hidden');
+    if (UI.kb1NoneBtn) UI.kb1NoneBtn.classList.add('hidden');
+    UI.retakeBtn.classList.add('hidden');
+    UI.revealBtn.classList.remove('hidden');
+    UI.revealBtn.textContent = 'Back to Settings';
+    UI.revealBtn.onclick = resetToSettings;
+    if (UI.kb1PractiseBtn) {
+        UI.kb1PractiseBtn.classList.toggle('hidden', misses.length === 0);
+        UI.kb1PractiseBtn.textContent = `Practise my misses (${misses.length})`;
+        UI.kb1PractiseBtn.onclick = () => practiseMisses(misses);
+    }
+}
+
+// A normal session (feedback, Next, re-queue) with just the exam's missed questions.
+function practiseMisses(misses) {
+    if (UI.kb1PractiseBtn) UI.kb1PractiseBtn.classList.add('hidden');
+    UI.revealBtn.onclick = null;
+    AppState.initialQueue = shuffleArray(misses.map(q => Object.assign({}, q)));
+    AppState.originalTotal = AppState.initialQueue.length;
+    retakeSession();
 }
 
 function waitForNext(continuation) {
@@ -1401,6 +1479,12 @@ function skipCurrentQuestion() {
     const now = Date.now();
     if (AppState.isGrading || (now - AppState.lastSubmitTime < 300)) return;
     if (AppState.studyQueue.length === 0) return;
+    if (AppState.exam) {                 // mock exam: a skipped question is recorded as unanswered
+        AppState.isGrading = true;
+        AppState.lastSubmitTime = now;
+        gradeClassQuestion(AppState.studyQueue[0], null);
+        return;
+    }
 
     AppState.isGrading = true;
     AppState.lastSubmitTime = now;
@@ -1825,11 +1909,17 @@ function calculateSimilarity(str1, str2) {
 }
 
 function updateCounter() {
-    UI.sessionCounter.textContent = `${AppState.completedCount} / ${AppState.originalTotal}`;
+    UI.sessionCounter.textContent = `${AppState.completedCount} / ${AppState.originalTotal}${examTimeLeft()}`;
 }
 
 function finishSession() {
     clearPendingNext();
+    if (AppState.exam) {
+        AppState.isGrading = false;
+        clearElementFlash(UI.answerInput);
+        showExamResults();
+        return;
+    }
     if (UI.kb1NoneBtn) UI.kb1NoneBtn.classList.add('hidden');
     if (AppState.flashTimer) {
         clearTimeout(AppState.flashTimer);
@@ -1870,6 +1960,8 @@ function finishSession() {
 
 function retakeSession() {
     clearPendingNext();
+    UI.studySection.querySelector('.study-card')?.classList.remove('kb1-wide');
+    if (UI.kb1PractiseBtn) UI.kb1PractiseBtn.classList.add('hidden');
     AppState.studyQueue = [...AppState.initialQueue];
     AppState.studyQueue.forEach(q => { if (q.kb1) q.step = 0; });
     AppState.completedCount = 0;
@@ -1900,6 +1992,10 @@ function retakeSession() {
 
 function resetToSettings() {
     clearPendingNext();
+    UI.studySection.querySelector('.study-card')?.classList.remove('kb1-wide');
+    stopExamTimer();
+    AppState.exam = null;
+    if (UI.kb1PractiseBtn) UI.kb1PractiseBtn.classList.add('hidden');
     if (UI.kb1NoneBtn) UI.kb1NoneBtn.classList.add('hidden');
     window.speechSynthesis.cancel(); // Stop any currently playing audio
     
@@ -2208,6 +2304,10 @@ function saveSettings() {
 
     const activeKb1Mode = UI.settingsSection.querySelector('input[name="kb1-mode"]:checked');
     if (activeKb1Mode) settingsState['kb1-mode'] = activeKb1Mode.value;
+    ['kb1-exam-count', 'kb1-exam-minutes'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) settingsState[id] = el.value;
+    });
 
     const activeSubsetMode = UI.settingsSection.querySelector('input[name="subset-mode"]:checked');
     if (activeSubsetMode) settingsState['subset-mode'] = activeSubsetMode.value;
@@ -2257,6 +2357,10 @@ function loadSettings() {
             const radio = UI.settingsSection.querySelector(`input[name="sentence-study-mode"][value="${settingsState['sentence-study-mode']}"]`);
             if (radio) radio.checked = true;
         }
+        ['kb1-exam-count', 'kb1-exam-minutes'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el && settingsState[id]) el.value = settingsState[id];
+        });
         if (settingsState['kb1-mode']) {
             const radio = UI.settingsSection.querySelector(`input[name="kb1-mode"][value="${settingsState['kb1-mode']}"]`);
             if (radio) radio.checked = true;
@@ -2536,7 +2640,7 @@ UI.revealBtn.addEventListener('click', () => {
     }
 
     if (AppState.currentCategory === 'kb1' && !isReadingQuestion(AppState.studyQueue[0])) {
-        if (AppState.isGrading || AppState.pendingNext || AppState.studyQueue.length === 0) return;
+        if (AppState.isGrading || AppState.pendingNext || AppState.exam || AppState.studyQueue.length === 0) return;
         AppState.isGrading = true;
         gradeClassQuestion(AppState.studyQueue[0], null);
         return;
@@ -2786,7 +2890,7 @@ async function initApp() {
         renderSentenceMasterList();
         // 7. 漢字基礎１ tab (unlock + settings)
         if (window.KB1) window.KB1.init({
-            decryptEncFile, flashElementColor, updateLiveEstimator, renderMasterList,
+            decryptEncFile, flashElementColor, updateLiveEstimator, renderMasterList, saveSettings,
             knownIds: () => Array.from(AppState.knownWords)
         });
     } catch (error) {

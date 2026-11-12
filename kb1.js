@@ -19,6 +19,10 @@ window.KB1 = (function () {
         if (!btn || !input) return;
         btn.addEventListener('click', () => unlock(input.value));
         document.addEventListener('change', e => { if (e.target.name === 'kb1-mode') showModeOptions(); });
+        ['kb1-exam-count', 'kb1-exam-minutes'].forEach(id => {
+            const el = $(id);
+            if (el) el.addEventListener('input', () => { ctx.saveSettings(); ctx.updateLiveEstimator(); });
+        });
         showModeOptions();
         input.addEventListener('keydown', e => {
             if (e.key === 'Enter') { e.preventDefault(); unlock(input.value); }
@@ -61,6 +65,8 @@ window.KB1 = (function () {
     function showModeOptions() {
         const box = $('kb1-kanji-options');
         if (box) box.classList.toggle('hidden', mode() !== 'kb1-kanji');
+        const exam = $('kb1-exam-options');
+        if (exam) exam.classList.toggle('hidden', mode() !== 'kb1-exam');
     }
 
     function renderInfo() {
@@ -84,11 +90,17 @@ window.KB1 = (function () {
             .filter(cb => cb.checked).map(cb => parseInt(cb.dataset.kb1Step, 10));
         const kanjiTypes = Array.from(document.querySelectorAll('[data-kb1-kanji-type]'))
             .filter(cb => cb.checked).map(cb => cb.dataset.kb1KanjiType);
+        const examTypes = Array.from(document.querySelectorAll('[data-kb1-exam-type]'))
+            .filter(cb => cb.checked).map(cb => cb.dataset.kb1ExamType);
+        const num = (id, dflt) => { const v = parseInt($(id)?.value, 10); return Number.isFinite(v) && v > 0 ? v : dflt; };
         return {
             steps,
             includeExtra: !!($('kb1-include-extra') && $('kb1-include-extra').checked),
             exclude: new Set(ctx.knownIds()),
             kanjiTypes,
+            examTypes,
+            examCount: Math.min(200, num('kb1-exam-count', 50)),
+            examMinutes: $('kb1-exam-timer')?.checked ? Math.min(180, num('kb1-exam-minutes', 50)) : 0,
         };
     }
 
@@ -110,8 +122,10 @@ window.KB1 = (function () {
         const opts = options();
         if (!opts.steps.length) { alert('Please choose at least one Step.'); return null; }
         if (mode() === 'kb1-kanji' && !opts.kanjiTypes.length) { alert('Please choose at least one question type.'); return null; }
+        if (mode() === 'kb1-exam' && !opts.examTypes.length) { alert('Please choose at least one question type.'); return null; }
         return { words: KB1Core.selectWords(data, opts), sentences: KB1Core.selectSentences(data, opts),
-                 kanji: KB1Core.selectKanji(data, opts), opts };
+                 kanji: KB1Core.selectKanji(data, opts), special: KB1Core.specialWords(data, opts),
+                 kanjiAll: data.vocabulary.filter(w => w.type === 'kanji'), opts };
     }
 
     return { init, isUnlocked, findWord, estimateHtml, source, mode, options };
