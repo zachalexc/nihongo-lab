@@ -269,6 +269,7 @@
         const items = [];
         for (const w of words) {
             const parts = w.kb1.split || [];
+            if (w.base.kanji.length === 1) continue;     // "上 in 上" asks nothing new
             parts.forEach((part, i) => {
                 const [text, reading, type] = part;
                 if ((type === 'on' || type === 'kun') && text.length === 1 && kanjiByChar.has(text)) {
@@ -300,7 +301,9 @@
                 (mc ? '' : ' Type it in hiragana') + '</div>',
         };
         if (mc) {
-            const all = [...taught(k, 'on'), ...taught(k, 'kun')].flatMap(e => e.forms.map(stripParens));
+            // one spelling per reading, as it appears inside words (kun: the stem, not the dictionary form)
+            const all = [...k.kb1.on_readings.flatMap(([m, v]) => [m, ...v]),
+                         ...k.kb1.kun_readings.flatMap(r => [r.stem, ...r.variants])];
             // then near-miss sounds, then readings of other kanji from the same Step
             const sameStep = shuffle([...kanjiByChar.values()].filter(o => o !== k && o.kb1.steps[0] === k.kb1.steps[0]), rng)
                 .flatMap(o => taught(o, type).map(e => stripParens(e.forms[0])));

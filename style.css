@@ -816,3 +816,13 @@ input[type="range"]::-moz-range-thumb {
 .kb1-misses { max-height: 50vh; overflow: auto; }
 .kb1-results i { color: var(--text-secondary); }
 .study-card.kb1-wide { max-width: min(960px, 96vw); width: 100%; }
+/* 漢字基礎１ sessions on phones: keep the prompt clear of × and the counter; fit sentences */
+.kb1-session .reading-sentence { font-size: clamp(1.5rem, 6.5vw, 2.2rem) !important; line-height: 1.9; }
+@media (max-width: 600px) {
+    .study-card.kb1-session { padding-top: 3.5rem; }
+    .kb1-session .kb1-word { font-size: clamp(2rem, 11vw, 2.6rem); }
+    .kb1-session .kb1-info { font-size: 0.95rem; }
+    .kb1-misses { max-height: none; overflow-x: auto; }
+    .kb1-results table { font-size: 0.82rem; }
+    .kb1-results th, .kb1-results td { padding: 0.25rem 0.35rem; }
+}

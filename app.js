@@ -907,6 +907,9 @@ function initializeSession() {
 
     UI.settingsSection.classList.add('hidden');
     UI.studySection.classList.remove('hidden');
+    // 漢字基礎１ sessions get their own layout tweaks (phone spacing, sentence size, answer hint)
+    UI.studySection.querySelector('.study-card')?.classList.toggle('kb1-session', AppState.currentCategory === 'kb1');
+    UI.answerInput.placeholder = AppState.currentCategory === 'kb1' ? 'Type the reading in kana…' : 'Type answer in romaji or kana...';
     
     if (AppState.currentStudyMode === 'flash' || AppState.currentStudyMode === 'listening') {
         UI.revealBtn.textContent = 'End Session';
@@ -993,7 +996,7 @@ async function loadNextQuestion() {
             ? renderReadingSentence(currentQuestion.japaneseText, currentQuestion.components, AppState.activeFuriganaIndex)
             : currentQuestion.japaneseText;
 
-        UI.promptText.innerHTML = `<div style="font-size: 2.2rem; color: var(--accent-color); margin-bottom: 1rem;">${renderedSentence}</div><div style="font-size: 1rem; color: var(--text-secondary);">${currentQuestion.promptText}</div>`;
+        UI.promptText.innerHTML = `<div class="reading-sentence" style="font-size: 2.2rem; color: var(--accent-color); margin-bottom: 1rem;">${renderedSentence}</div><div style="font-size: 1rem; color: var(--text-secondary);">${currentQuestion.promptText}</div>`;
         UI.promptText.style.fontSize = ''; 
         UI.promptText.style.color = '';
         
