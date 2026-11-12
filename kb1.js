@@ -71,8 +71,13 @@ window.KB1 = (function () {
 
     function renderInfo() {
         const c = data.meta.counts, el = $('kb1-data-info');
+        // Steps with low-confidence (inferred, unconfirmed) handout answers, e.g. Step 6 before its class
+        const provisional = [...new Set(data.vocabulary
+            .filter(w => w.type === 'kanji' && w.kb1.confidence === 'low')
+            .map(w => w.kb1.steps[0]))].sort();
         if (el) el.textContent =
-            `${c.class_words} handout words · ${c.kanji} kanji · ${c.sentences} sentences · data ${data.meta.export_generated}`;
+            `${c.class_words} handout words · ${c.kanji} kanji · ${c.sentences} sentences · data ${data.meta.export_generated}` +
+            (provisional.length ? ` · Step ${provisional.join(', ')} answers provisional` : '');
     }
 
     // The app's own "learned" list (check to exclude), for the class words.
@@ -113,7 +118,8 @@ window.KB1 = (function () {
 
     function estimateHtml() {
         if (!data) return 'Estimated Flashcards: <span>Locked</span>';
-        return `Estimated Flashcards: <span>${KB1Core.estimate(data, options(), mode())}</span>`;
+        const label = mode() === 'kb1-exam' ? 'Exam questions' : 'Estimated Flashcards';
+        return `${label}: <span>${KB1Core.estimate(data, options(), mode())}</span>`;
     }
 
     // The entries a session draws from, or null (after telling the user why).

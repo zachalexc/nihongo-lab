@@ -1412,8 +1412,10 @@ function showExamResults() {
     AppState.studyQueue = [];
     const misses = exam.records.filter(r => !r.correct).map(r => Object.assign({}, r.q, { step: 0 }));
     const timeUp = exam.endsAt && Date.now() >= exam.endsAt;
+    const unanswered = exam.records.filter(r => r.answer == null).length;
+    const note = timeUp ? 'Time is up.' : (unanswered ? `Exam ended early: ${unanswered} unanswered.` : '');
     UI.studySection.querySelector('.study-card')?.classList.add('kb1-wide');
-    UI.promptText.innerHTML = (timeUp ? '<div class="kb1-instruction">Time is up.</div>' : '') +
+    UI.promptText.innerHTML = (note ? `<div class="kb1-instruction">${note}</div>` : '') +
         KB1Core.examResultsHtml(exam.records, findWordById);
     const right = exam.records.filter(r => r.correct).length;
     UI.sessionCounter.textContent = `${right} / ${exam.records.length}`;
@@ -2538,7 +2540,8 @@ async function decryptDevData(password) {
 // --- EVENT LISTENERS ---
 
 UI.startBtn.addEventListener('click', initializeSession);
-UI.closeSessionBtn.addEventListener('click', resetToSettings);
+// × during a mock exam ends it and shows the results so far; otherwise back to settings
+UI.closeSessionBtn.addEventListener('click', () => (AppState.exam ? finishSession() : resetToSettings()));
 
 UI.submitBtn.addEventListener('click', () => {
     evaluateAnswer(UI.answerInput.value);
