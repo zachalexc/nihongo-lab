@@ -45,6 +45,7 @@ const AppState = {
     isGrading: false,
     lastSubmitTime: 0,
     isDevUnlocked: false,
+    pendingNext: null,        // 漢字基礎１: feedback is showing; Enter / Next runs this to move on
     devMasteredSubsets: new Set()
 };
 
@@ -110,6 +111,9 @@ const UI = {
     tabNouns: document.getElementById('tab-nouns'),
     tabSentences: document.getElementById('tab-sentences'),
     tabDev: document.getElementById('tab-dev'),
+    tabKb1: document.getElementById('tab-kb1'),
+    choiceBtnsContainer: document.getElementById('choice-buttons-container'),
+    kb1NoneBtn: document.getElementById('kb1-none-btn'),
     devLockView: document.getElementById('dev-lock-view'),
     devSettingsView: document.getElementById('dev-settings-view'),
     devPasswordInput: document.getElementById('dev-password-input'),
@@ -162,12 +166,12 @@ function shuffleArray(array) {
     return shuffled;
 }
 
-// Mode checks shared by the tabs.
+// Mode checks shared by the tabs. The 漢字基礎１ tab runs the same modes on class data.
 function isGroupMode() {
-    return AppState.currentStudyMode === 'group' && AppState.currentCategory === 'verb';
+    return AppState.currentStudyMode === 'group' && (AppState.currentCategory === 'verb' || AppState.currentCategory === 'kb1');
 }
 function isFlashMode() {
-    return AppState.currentCategory === 'sentence' &&
+    return (AppState.currentCategory === 'sentence' || AppState.currentCategory === 'kb1') &&
         (AppState.currentStudyMode === 'flash' || AppState.currentStudyMode === 'listening');
 }
 
@@ -237,9 +241,11 @@ function switchTab(category) {
         AppState.currentStudyMode = document.querySelector('input[name="verb-study-mode"]:checked')?.value || 'translation';
     } else if (category === 'dev') {
         AppState.currentStudyMode = 'reading';
+    } else if (category === 'kb1') {
+        AppState.currentStudyMode = document.querySelector('input[name="kb1-mode"]:checked')?.value || 'kb1-reading-typed';
     }
 
-    const targetId = category === 'dev' ? 'tab-dev' : `tab-${category}s`;
+    const targetId = (category === 'dev' || category === 'kb1') ? `tab-${category}` : `tab-${category}s`;
 
     // Update active class on the tab buttons
     UI.tabBtns.forEach(btn => {
@@ -247,15 +253,17 @@ function switchTab(category) {
     });
 
     // Toggle visibility of content wrappers
-    [UI.tabVerbs, UI.tabAdjectives, UI.tabNouns, UI.tabSentences, UI.tabDev].forEach(panel => {
+    [UI.tabVerbs, UI.tabAdjectives, UI.tabNouns, UI.tabSentences, UI.tabDev, UI.tabKb1].forEach(panel => {
         if (panel) panel.classList.toggle('hidden', panel.id !== targetId);
     });
 
-    // Toggle visibility of specific settings groups for Sentences and Dev tabs
-    const hideCommonGroups = category === 'sentence' || category === 'dev';
+    // Toggle visibility of specific settings groups for Sentences, Dev and 漢字基礎１ tabs
+    const hideCommonGroups = category === 'sentence' || category === 'dev' || category === 'kb1';
     [UI.jlptSettingsGroup, UI.subsetSettingsGroup, UI.audioSettingsGroup, UI.kanjiSettingsGroup].forEach(group => {
         if (group) group.classList.toggle('hidden', hideCommonGroups);
     });
+    // Class questions read the answer aloud like the vocabulary tabs, so keep the audio options there
+    if (category === 'kb1' && UI.audioSettingsGroup) UI.audioSettingsGroup.classList.remove('hidden');
 
     // Refresh the UI state for the selected category
     renderSubsetCheckboxes();
@@ -266,7 +274,7 @@ function switchTab(category) {
 
 
 // Renders one "known words" list (check to exclude): a filter box, then one checkbox per word.
-// Used by the Verbs/Adjectives/Nouns tabs.
+// Used by the Verbs/Adjectives/Nouns tabs and by the 漢字基礎１ tab (class words, same format).
 function renderMasterList(container, words, label, labelFn) {
     if (!container) return;
     const describe = labelFn || (word => `${word.base.kana} (${word.meaning})`);
@@ -343,8 +351,8 @@ function renderSentenceMasterList() {
 function renderSubsetCheckboxes() {
     if (!AppState.omniDatabase) return;
 
-    // Handle Sentences and Dev category transition
-    if (AppState.currentCategory === 'sentence' || AppState.currentCategory === 'dev') {
+    // Handle Sentences, Dev and 漢字基礎１ category transition
+    if (AppState.currentCategory === 'sentence' || AppState.currentCategory === 'dev' || AppState.currentCategory === 'kb1') {
         // UI is now handled statically by the number inputs in HTML
         return;
     }
@@ -417,7 +425,7 @@ function renderSubsetCheckboxes() {
 function getFilteredAndChunkedVocab() {
     if (!AppState.omniDatabase) return [];
 
-    if (AppState.currentCategory === 'sentence' || AppState.currentCategory === 'dev') {
+    if (AppState.currentCategory === 'sentence' || AppState.currentCategory === 'dev' || AppState.currentCategory === 'kb1') {
         return [];
     }
 
@@ -465,6 +473,12 @@ function getFilteredAndChunkedVocab() {
 // Calculates the expected number of flashcards based on current settings.
 
 function updateLiveEstimator() {
+    // --- 漢字基礎１ CATEGORY ESTIMATOR ---
+    if (AppState.currentCategory === 'kb1') {
+        UI.estimatorText.innerHTML = window.KB1 ? window.KB1.estimateHtml() : 'Estimated Flashcards: <span>Locked</span>';
+        return;
+    }
+
     // --- DEV CATEGORY ESTIMATOR ---
     if (AppState.currentCategory === 'dev') {
         if (!AppState.isDevUnlocked || !AppState.devSubsets || AppState.devSubsets.length === 0) {
@@ -567,8 +581,8 @@ function updateLiveEstimator() {
 
 
 // --- QUESTION BUILDERS ---
-// Shared by the tabs. Each takes entries in the app's own formats (data.json words,
-// sentence_data.json sentences) and returns study-queue questions.
+// Shared by the vocabulary tabs, Sentences/Dev and 漢字基礎１. Each takes entries in the app's own
+// formats (data.json words, sentence_data.json sentences) and returns study-queue questions.
 
 // Flash & Listening: an endless queue of sentences (sentence_data.json format), limited by the
 // Max Character Length setting, with recently seen ones moved to the back.
@@ -617,7 +631,7 @@ function buildFlashQuestions(sentenceList) {
     return rawQuestions;
 }
 
-// Sentence reading (Sentences and Dev): one sentence in sentence_data.json format.
+// Sentence reading (Sentences, Dev and 漢字基礎１): one sentence in sentence_data.json format.
 function buildReadingQuestion(item, extra = {}) {
     return Object.assign({
         type: 'sentence',
@@ -633,7 +647,7 @@ function buildReadingQuestion(item, extra = {}) {
     }, extra);
 }
 
-// Verb group identification (Verbs tab): words in data.json format.
+// Verb group identification (Verbs tab, 漢字基礎１): words in data.json format.
 function buildGroupQuestions(words) {
     return words.map(word => {
         const exceptionMarker = word.isException ? ' ⚠️' : '';
@@ -647,7 +661,7 @@ function buildGroupQuestions(words) {
     });
 }
 
-// Meaning -> word, typed (Nouns tab): words in data.json format.
+// Meaning -> word, typed (Nouns tab, 漢字基礎１): words in data.json format.
 function buildNounQuestions(words) {
     return words.map(word => ({
         wordId: word.id,
@@ -671,6 +685,17 @@ function initializeSession() {
     // Reset the "endless" marker a previous Flash/Listening session may have left behind
     AppState.originalTotal = 0;
 
+    // --- 漢字基礎１ (class section): the class data is in the app's own formats, so the existing
+    // modes use the shared builders; only the class-only modes come from kb1_core.js ---
+    if (AppState.currentCategory === 'kb1') {
+        const src = window.KB1 ? window.KB1.source() : null;
+        if (!src) return;
+        const mode = AppState.currentStudyMode;
+        if (mode === 'translation') rawQuestions = buildNounQuestions(src.words);
+        else if (mode === 'reading') rawQuestions = src.sentences.map(s => buildReadingQuestion(s, {
+            englishTranslation: s.english_translation, showTranslation: true }));
+        else rawQuestions = KB1Core.buildQueue(src, mode, src.opts);
+    } else
     // --- NEW SENTENCE GATHERING LOGIC ---
     if (AppState.currentCategory === 'sentence') {
         
@@ -888,7 +913,40 @@ function initializeSession() {
     loadNextQuestion();
 }
 
+// True when the question is a sentence to read (Sentences/Dev reading mode, or a class sentence)
+function isReadingQuestion(question) {
+    if (AppState.currentCategory === 'kb1') return AppState.currentStudyMode === 'reading';
+    return (AppState.currentCategory === 'sentence' || AppState.currentCategory === 'dev') && AppState.currentStudyMode === 'reading';
+}
+
+// Multiple-choice buttons (class questions). Clicking one, or pressing 1-4, submits it.
+function renderChoiceButtons(question) {
+    const box = UI.choiceBtnsContainer;
+    if (!box) return;
+    box.innerHTML = '';
+    question.choices.forEach((choice, i) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-secondary choice-btn';
+        btn.dataset.choiceIndex = String(i);
+        if (question.choicesLang) btn.lang = question.choicesLang;
+        const num = document.createElement('span');
+        num.className = 'choice-num';
+        num.textContent = String(i + 1);
+        const label = document.createElement('span');
+        label.className = 'choice-label';
+        label.textContent = choice;
+        btn.append(num, label);
+        box.appendChild(btn);
+    });
+    box.classList.remove('hidden');
+}
+
 function toggleUIInputs() {
+    if (AppState.currentCategory === 'kb1' && !isGroupMode()) {   // chosen per question in loadNextQuestion
+        UI.groupBtnsContainer.classList.add('hidden');
+        return;
+    }
     const isGroupActive = isGroupMode();
     if (isGroupActive) {
         UI.answerInput.classList.add('hidden');
@@ -908,8 +966,22 @@ async function loadNextQuestion() {
     }
 
     const currentQuestion = AppState.studyQueue[0];
-    
-    if ((AppState.currentCategory === 'sentence' || AppState.currentCategory === 'dev') && AppState.currentStudyMode === 'reading') {
+
+    // Class questions switch between typed answers, buttons and sentences from card to card
+    if (AppState.currentCategory === 'kb1' && UI.choiceBtnsContainer && !isGroupMode() && !isFlashMode()) {
+        const isChoice = !!currentQuestion.choices;
+        UI.choiceBtnsContainer.classList.toggle('hidden', !isChoice);
+        UI.answerInput.classList.toggle('hidden', isChoice);
+        UI.submitBtn.classList.toggle('hidden', isChoice);
+        UI.revealBtn.classList.remove('hidden');
+        UI.answerInput.readOnly = false;
+        if (UI.kb1NoneBtn) UI.kb1NoneBtn.classList.toggle('hidden', !currentQuestion.allowNone);
+        if (isChoice) renderChoiceButtons(currentQuestion);
+    } else if (UI.kb1NoneBtn) {
+        UI.kb1NoneBtn.classList.add('hidden');
+    }
+
+    if (isReadingQuestion(currentQuestion)) {
         const renderedSentence = currentQuestion.components 
             ? renderReadingSentence(currentQuestion.japaneseText, currentQuestion.components, AppState.activeFuriganaIndex)
             : currentQuestion.japaneseText;
@@ -1017,7 +1089,14 @@ async function loadNextQuestion() {
 async function evaluateAnswer(submittedAnswer) {
     const now = Date.now();
     if (AppState.isGrading || (now - AppState.lastSubmitTime < 300)) return;
-    if (AppState.studyQueue.length === 0) return;
+    if (AppState.studyQueue.length === 0 && !AppState.pendingNext) return;
+
+    // 漢字基礎１: while feedback is showing, Enter / Next moves on
+    if (AppState.pendingNext) {
+        AppState.lastSubmitTime = now;
+        runPendingNext();
+        return;
+    }
 
     AppState.isGrading = true;
     AppState.lastSubmitTime = now;
@@ -1026,10 +1105,20 @@ async function evaluateAnswer(submittedAnswer) {
         const currentQuestion = AppState.studyQueue[0];
 
         // --- ADD THIS ENTIRE BLOCK FOR READING MODE ---
-        if ((AppState.currentCategory === 'sentence' || AppState.currentCategory === 'dev') && AppState.currentStudyMode === 'reading') {
+        if (isReadingQuestion(currentQuestion)) {
             // Strip out punctuation so user input aligns with the base kana string
-            const normalizedInput = submittedAnswer.trim().replace(/[。、？！\.\?!, ]/g, ''); 
+            const normalizedInput = submittedAnswer.trim().replace(/[。、？！\.\?!, ]/g, '');
             const isCorrect = (normalizedInput === currentQuestion.correctAnswerKana);
+
+            // Class sentences: after a correct answer show the reading and English until Enter / Next
+            const waitAfter = isCorrect && currentQuestion.showTranslation;
+            if (waitAfter) {
+                UI.promptText.innerHTML =
+                    `<div lang="ja" style="font-size: 2.2rem; color: var(--accent-color); margin-bottom: 0.5rem;">${KB1Core.escapeHtml(currentQuestion.japaneseText)}</div>` +
+                    `<div lang="ja" class="kb1-instruction">${KB1Core.escapeHtml(currentQuestion.readText)}</div>` +
+                    `<div class="kb1-translation">${KB1Core.escapeHtml(currentQuestion.englishTranslation)}</div>`;
+            }
+            const goNext = () => waitAfter ? waitForNext(() => loadNextQuestion()) : setTimeout(() => loadNextQuestion(), 300);
 
             if (isCorrect) {
                 if (currentQuestion.step === 0) {
@@ -1039,7 +1128,7 @@ async function evaluateAnswer(submittedAnswer) {
                     AppState.activeFuriganaIndex = -1;
                     AppState.studyQueue.shift();
                     
-                    setTimeout(() => loadNextQuestion(), 300);
+                    goNext();
                 } else {
                     // Corrected with spotlight -> SRS Re-insert 3 spaces down
                     flashElementColor(UI.answerInput, 'var(--success-color)');
@@ -1051,7 +1140,7 @@ async function evaluateAnswer(submittedAnswer) {
                     const insertIndex = Math.min(initialDelay, AppState.studyQueue.length);
                     AppState.studyQueue.splice(insertIndex, 0, questionToRequeue);
                     
-                    setTimeout(() => loadNextQuestion(), 300);
+                    goNext();
                 }
             } else {
                 flashElementColor(UI.answerInput, 'var(--error-color)');
@@ -1065,6 +1154,12 @@ async function evaluateAnswer(submittedAnswer) {
             return;
         }
         // --- END READING MODE BLOCK ---
+
+        // --- 漢字基礎１: every other class question is graded the same way, then waits for Enter / Next ---
+        if (AppState.currentCategory === 'kb1') {
+            gradeClassQuestion(currentQuestion, submittedAnswer);
+            return;
+        }
 
         if (AppState.currentStudyMode === 'flash' || AppState.currentStudyMode === 'listening') {
             const score = calculateSimilarity(submittedAnswer, currentQuestion.correctAnswerKana);
@@ -1108,12 +1203,19 @@ async function evaluateAnswer(submittedAnswer) {
         const isGroupActive = isGroupMode();
         if (isGroupActive) {
             isCorrect = (submittedAnswer === currentQuestion.correctAnswer);
-            visualTarget = UI.groupBtnsContainer; 
+            visualTarget = UI.groupBtnsContainer;
+        } else if (currentQuestion.choices) {
+            // Multiple choice (class questions)
+            isCorrect = (submittedAnswer === currentQuestion.correctAnswer);
+            visualTarget = UI.choiceBtnsContainer;
+            if (!isCorrect) markChoice(submittedAnswer, 'choice-wrong');
         } else {
             const normalizedInput = submittedAnswer.trim().toLowerCase();
-            
+
             // Split the checks so we know HOW they got it right
-            const isKanaMatch = normalizedInput === currentQuestion.correctAnswerKana || normalizedInput === currentQuestion.correctAnswerRomaji.toLowerCase();
+            // (acceptAnswers: extra accepted spellings, e.g. on'yomi typed in hiragana or katakana)
+            const isKanaMatch = normalizedInput === currentQuestion.correctAnswerKana || normalizedInput === currentQuestion.correctAnswerRomaji.toLowerCase()
+                || (currentQuestion.acceptAnswers || []).includes(submittedAnswer.trim());
             const isExactKanjiMatch = currentQuestion.kanjiText && normalizedInput === currentQuestion.kanjiText;
             
             isCorrect = isKanaMatch || isExactKanjiMatch;
@@ -1179,7 +1281,8 @@ async function evaluateAnswer(submittedAnswer) {
             const practiceModeOn = UI.kanjiPracticeToggle && UI.kanjiPracticeToggle.checked;
 
             // Partial Success Intercept: They typed kana, but Practice Mode wants Kanji
-            if (practiceModeOn && hasKanji && !currentQuestion._isExactKanjiMatch) {
+            // (never for class questions: the class exam doesn't test writing kanji)
+            if (practiceModeOn && hasKanji && !currentQuestion._isExactKanjiMatch && AppState.currentCategory !== 'kb1') {
                 AppState.isKanjiDrawingMode = true;
                 flashElementColor(visualTarget, 'var(--accent-color)'); // Blue "Info" flash
 
@@ -1227,12 +1330,74 @@ async function evaluateAnswer(submittedAnswer) {
     }
 }
 
+// --- 漢字基礎１: feedback, then Enter / Next ---
+// Shows the result and the full answer, then waits; the queue moves on only when the user says so.
+function gradeClassQuestion(question, submittedAnswer) {
+    const result = KB1Core.grade(question, submittedAnswer, findWordById);
+    const target = question.choices ? UI.choiceBtnsContainer : UI.answerInput;
+    flashElementColor(target, result.correct ? 'var(--success-color)' : 'var(--error-color)');
+    if (question.choices) {
+        markChoice(question.correctAnswer, 'choice-correct');
+        if (!result.correct && submittedAnswer != null) markChoice(submittedAnswer, 'choice-wrong');
+    }
+    UI.promptText.innerHTML += `<div class="kb1-feedback">${result.html}</div>`;
+    if (!result.correct && question.readText && UI.audioToggleCheckbox.checked) speakJapanese(question.readText);
+    if (result.correct && question.readText && UI.audioToggleCorrectCheckbox && UI.audioToggleCorrectCheckbox.checked) speakJapanese(question.readText);
+    waitForNext(() => {
+        const q = AppState.studyQueue.shift();
+        if (result.correct) {
+            if (q.step === 1) {          // answered right after an earlier miss: one more check later
+                q.step = 2;
+                const finalDelay = parseInt(UI.srsFinalDelay?.value, 10) || 10;
+                AppState.studyQueue.splice(Math.min(finalDelay, AppState.studyQueue.length), 0, q);
+            } else {
+                AppState.completedCount++;
+            }
+        } else {                          // missed: comes back a few cards later
+            q.step = 1;
+            const initialDelay = parseInt(UI.srsInitialDelay?.value, 10) || 4;
+            AppState.studyQueue.splice(Math.min(initialDelay, AppState.studyQueue.length), 0, q);
+        }
+        loadNextQuestion();
+    });
+}
+
+function waitForNext(continuation) {
+    AppState.pendingNext = continuation;
+    AppState.isGrading = false;
+    UI.submitBtn.textContent = 'Next →';
+    UI.submitBtn.classList.remove('hidden');
+    UI.skipBtn.classList.add('hidden');
+    UI.revealBtn.classList.add('hidden');
+    if (UI.kb1NoneBtn) UI.kb1NoneBtn.classList.add('hidden');
+    UI.answerInput.readOnly = true;
+    if (UI.choiceBtnsContainer) UI.choiceBtnsContainer.classList.add('answered');
+    UI.submitBtn.focus();
+}
+
+function clearPendingNext() {
+    AppState.pendingNext = null;
+    UI.submitBtn.textContent = 'Submit';
+    UI.skipBtn.classList.remove('hidden');
+    UI.answerInput.readOnly = false;
+    if (UI.choiceBtnsContainer) UI.choiceBtnsContainer.classList.remove('answered');
+}
+
+function runPendingNext() {
+    const next = AppState.pendingNext;
+    clearPendingNext();
+    if (UI.choiceBtnsContainer) clearElementFlash(UI.choiceBtnsContainer);
+    clearElementFlash(UI.answerInput);
+    if (next) next();
+}
+
 // Skips the current card without marking it correct or incorrect -- no SRS
 // penalty, no "completed" credit. For a bad/broken card (data error) or a
 // card the user just doesn't want to see right now. Shrinks the session
 // total along with the queue so "completed / total" still reaches 100%
 // instead of permanently falling short by one for every skipped card.
 function skipCurrentQuestion() {
+    if (AppState.pendingNext) return;
     const now = Date.now();
     if (AppState.isGrading || (now - AppState.lastSubmitTime < 300)) return;
     if (AppState.studyQueue.length === 0) return;
@@ -1247,6 +1412,7 @@ function skipCurrentQuestion() {
     hideStrokeOrderPopup();
     clearElementFlash(UI.answerInput);
     clearElementFlash(UI.groupBtnsContainer);
+    if (UI.choiceBtnsContainer) clearElementFlash(UI.choiceBtnsContainer);
 
     AppState.studyQueue.shift();
     if (AppState.originalTotal > 0) AppState.originalTotal--;
@@ -1255,6 +1421,15 @@ function skipCurrentQuestion() {
         AppState.isGrading = false;
         loadNextQuestion();
     }, 150);
+}
+
+// Colours one multiple-choice button by its text (class questions)
+function markChoice(choiceText, className) {
+    if (!UI.choiceBtnsContainer) return;
+    UI.choiceBtnsContainer.querySelectorAll('.choice-btn').forEach(btn => {
+        const label = btn.querySelector('.choice-label');
+        if (label && label.textContent === choiceText) btn.classList.add(className);
+    });
 }
 
 function processCorrectAnswerVisuals(currentQuestion) {
@@ -1302,9 +1477,19 @@ function handleIncorrectAnswer(questionToRequeue, visualTarget) {
     if (isGroupActive) {
         const groupMap = { 'group1': 'Group I', 'group2': 'Group II', 'group3': 'Group III' };
         UI.promptText.innerHTML += `<br><span style="color: var(--error-color); font-size: 1rem;">Correct: ${groupMap[questionToRequeue.correctAnswer]}</span>`;
+    } else if (questionToRequeue.choices) {
+        // Multiple choice: highlight the right button, show reading + meaning; they then tap it to continue
+        markChoice(questionToRequeue.correctAnswer, 'choice-correct');
+        UI.promptText.innerHTML += `<div class="kb1-answer"><span lang="ja">${KB1Core.escapeHtml(questionToRequeue.revealText)}</span>` +
+            ` = <span lang="ja">${KB1Core.escapeHtml(questionToRequeue.correctAnswerKana)}</span>` +
+            ` · ${KB1Core.escapeHtml(questionToRequeue.revealMeaning || '')}</div>`;
+    } else if (questionToRequeue.kb1) {
+        UI.promptText.innerHTML += `<div class="kb1-answer"><span lang="ja">${KB1Core.escapeHtml(questionToRequeue.correctAnswerKana)}</span>` +
+            ` · ${KB1Core.escapeHtml(questionToRequeue.revealMeaning || '')}</div>`;
+        UI.answerInput.value = '';
     } else {
         // Find the original word object to get kanji
-        const originalWord = AppState.omniDatabase.find(word => word.id === questionToRequeue.wordId);
+        const originalWord = findWordById(questionToRequeue.wordId);
         let displayKanji = '';
         if (originalWord) {
             let targetForm;
@@ -1644,6 +1829,8 @@ function updateCounter() {
 }
 
 function finishSession() {
+    clearPendingNext();
+    if (UI.kb1NoneBtn) UI.kb1NoneBtn.classList.add('hidden');
     if (AppState.flashTimer) {
         clearTimeout(AppState.flashTimer);
         AppState.flashTimer = null;
@@ -1675,13 +1862,16 @@ function finishSession() {
     UI.answerInput.style.display = 'none';
     UI.submitBtn.style.display = 'none';
     UI.groupBtnsContainer.style.display = 'none';
+    if (UI.choiceBtnsContainer) UI.choiceBtnsContainer.classList.add('hidden');
     UI.revealBtn.textContent = 'Back to Settings';
     
     UI.revealBtn.onclick = resetToSettings;
 }
 
 function retakeSession() {
+    clearPendingNext();
     AppState.studyQueue = [...AppState.initialQueue];
+    AppState.studyQueue.forEach(q => { if (q.kb1) q.step = 0; });
     AppState.completedCount = 0;
     AppState.isCorrectionMode = false;
     AppState.isKanjiDrawingMode = false;
@@ -1696,6 +1886,9 @@ function retakeSession() {
     UI.answerInput.style.display = '';
     UI.submitBtn.style.display = '';
     UI.groupBtnsContainer.style.display = '';
+    if (UI.choiceBtnsContainer) { clearElementFlash(UI.choiceBtnsContainer); UI.choiceBtnsContainer.classList.add('hidden'); }
+    UI.answerInput.classList.remove('hidden');
+    UI.submitBtn.classList.remove('hidden');
     UI.revealBtn.textContent = (AppState.currentStudyMode === 'flash' || AppState.currentStudyMode === 'listening') ? 'End Session' : 'Reveal';
     
     UI.revealBtn.onclick = null;
@@ -1706,6 +1899,8 @@ function retakeSession() {
 }
 
 function resetToSettings() {
+    clearPendingNext();
+    if (UI.kb1NoneBtn) UI.kb1NoneBtn.classList.add('hidden');
     window.speechSynthesis.cancel(); // Stop any currently playing audio
     
     AppState.studyQueue = [];
@@ -1722,6 +1917,9 @@ function resetToSettings() {
     UI.answerInput.style.display = '';
     UI.submitBtn.style.display = '';
     UI.groupBtnsContainer.style.display = '';
+    if (UI.choiceBtnsContainer) { clearElementFlash(UI.choiceBtnsContainer); UI.choiceBtnsContainer.classList.add('hidden'); }
+    UI.answerInput.classList.remove('hidden');
+    UI.submitBtn.classList.remove('hidden');
     UI.answerInput.value = '';
     UI.revealBtn.textContent = 'Reveal';
     
@@ -1910,6 +2108,11 @@ function renderReadingSentence(japaneseText, components, activeIndex) {
 }
 
 
+// A word by id: the app's vocabulary, then the unlocked class vocabulary (same format).
+function findWordById(id) {
+    return AppState.omniDatabase.find(word => word.id === id) || (window.KB1 ? window.KB1.findWord(id) : null);
+}
+
 // Helper function to find an exact string match in the base or explicit forms.
 
 function findExactMatch(text, reading) {
@@ -2003,6 +2206,9 @@ function saveSettings() {
     const activeSentenceRadio = UI.settingsSection.querySelector('input[name="sentence-study-mode"]:checked');
     if (activeSentenceRadio) settingsState['sentence-study-mode'] = activeSentenceRadio.value;
 
+    const activeKb1Mode = UI.settingsSection.querySelector('input[name="kb1-mode"]:checked');
+    if (activeKb1Mode) settingsState['kb1-mode'] = activeKb1Mode.value;
+
     const activeSubsetMode = UI.settingsSection.querySelector('input[name="subset-mode"]:checked');
     if (activeSubsetMode) settingsState['subset-mode'] = activeSubsetMode.value;
     
@@ -2051,6 +2257,10 @@ function loadSettings() {
             const radio = UI.settingsSection.querySelector(`input[name="sentence-study-mode"][value="${settingsState['sentence-study-mode']}"]`);
             if (radio) radio.checked = true;
         }
+        if (settingsState['kb1-mode']) {
+            const radio = UI.settingsSection.querySelector(`input[name="kb1-mode"][value="${settingsState['kb1-mode']}"]`);
+            if (radio) radio.checked = true;
+        }
         if (settingsState['subset-mode']) {
             const radio = UI.settingsSection.querySelector(`input[name="subset-mode"][value="${settingsState['subset-mode']}"]`);
             if (radio) {
@@ -2075,6 +2285,8 @@ function loadSettings() {
             AppState.currentStudyMode = UI.settingsSection.querySelector('input[name="verb-study-mode"]:checked')?.value || 'translation';
         } else if (AppState.currentCategory === 'dev') {
             AppState.currentStudyMode = 'reading';
+        } else if (AppState.currentCategory === 'kb1') {
+            AppState.currentStudyMode = UI.settingsSection.querySelector('input[name="kb1-mode"]:checked')?.value || 'kb1-reading-typed';
         }
         
         if (settingsState['sentenceSubsetStart']) UI.sentenceSubsetStart.value = settingsState['sentenceSubsetStart'];
@@ -2104,7 +2316,7 @@ function base64ToUint8Array(base64) {
 
 // Fetches an encrypted JSON file ({salt, nonce, ciphertext}, base64) and decrypts it with the password:
 // PBKDF2-SHA256 (iterations stored in the file, default 100,000) -> AES-256-GCM. Throws on a wrong password.
-// Used by the Dev tab.
+// Used by the Dev and 漢字基礎１ tabs.
 async function decryptEncFile(url, password) {
     const resp = await fetch(url, { cache: 'no-store' });
     if (!resp.ok) {
@@ -2229,6 +2441,31 @@ if (UI.skipBtn) {
     UI.skipBtn.addEventListener('click', skipCurrentQuestion);
 }
 
+// Multiple-choice buttons (class questions): click, or press 1-4
+if (UI.choiceBtnsContainer) {
+    UI.choiceBtnsContainer.addEventListener('click', (e) => {
+        const btn = e.target.closest('.choice-btn');
+        if (!btn) return;
+        const label = btn.querySelector('.choice-label');
+        evaluateAnswer(label ? label.textContent : '');
+    });
+}
+document.addEventListener('keydown', (e) => {
+    if (AppState.pendingNext && e.key === 'Enter' && e.target !== UI.answerInput && !UI.studySection.classList.contains('hidden')) {
+        e.preventDefault();
+        evaluateAnswer('');
+        return;
+    }
+    if (AppState.pendingNext) return;
+    if (!UI.choiceBtnsContainer || UI.choiceBtnsContainer.classList.contains('hidden')) return;
+    if (UI.studySection.classList.contains('hidden') || e.ctrlKey || e.metaKey || e.altKey) return;
+    const n = parseInt(e.key, 10);
+    const btns = UI.choiceBtnsContainer.querySelectorAll('.choice-btn');
+    if (n >= 1 && n <= btns.length) { e.preventDefault(); btns[n - 1].click(); }
+});
+
+if (UI.kb1NoneBtn) UI.kb1NoneBtn.addEventListener('click', () => evaluateAnswer('なし'));
+
 UI.groupChoiceBtns.forEach(btn => {
     btn.addEventListener('click', (e) => {
         evaluateAnswer(e.target.dataset.answer);
@@ -2298,10 +2535,18 @@ UI.revealBtn.addEventListener('click', () => {
         return;
     }
 
+    if (AppState.currentCategory === 'kb1' && !isReadingQuestion(AppState.studyQueue[0])) {
+        if (AppState.isGrading || AppState.pendingNext || AppState.studyQueue.length === 0) return;
+        AppState.isGrading = true;
+        gradeClassQuestion(AppState.studyQueue[0], null);
+        return;
+    }
+
     if (AppState.studyQueue.length > 0) {
         if (AppState.isGrading) return;
         const isGroupActive = isGroupMode();
-        const visualTarget = isGroupActive ? UI.groupBtnsContainer : UI.answerInput;
+        const visualTarget = isGroupActive ? UI.groupBtnsContainer
+            : (AppState.studyQueue[0].choices ? UI.choiceBtnsContainer : UI.answerInput);
         AppState.isGrading = true;
         handleIncorrectAnswer(AppState.studyQueue[0], visualTarget);
     }
@@ -2330,6 +2575,12 @@ UI.settingsSection.addEventListener('change', (e) => {
         }
         // Handle Verb Study Mode Radios
         if (e.target.name === 'verb-study-mode') {
+            AppState.currentStudyMode = e.target.value;
+            updateModeUI();
+        }
+
+        // Handle 漢字基礎１ Study Mode Radios
+        if (e.target.name === 'kb1-mode') {
             AppState.currentStudyMode = e.target.value;
             updateModeUI();
         }
@@ -2433,7 +2684,7 @@ UI.settingsSection.addEventListener('change', (e) => {
 UI.tabBtns.forEach(btn => {
     btn.addEventListener('click', () => {
         const tabKey = btn.dataset.tab.replace('tab-', '');
-        const category = tabKey === 'dev' ? 'dev' : tabKey.slice(0, -1);
+        const category = (tabKey === 'dev' || tabKey === 'kb1') ? tabKey : tabKey.slice(0, -1);
         switchTab(category);
     });
 });
@@ -2470,6 +2721,8 @@ UI.bulkActionBtns.forEach(btn => {
         } else if (targetGroup === 'subsets') {
             // Re-query as these are dynamic
             targetCheckboxes = document.querySelectorAll('[data-subset-index]');
+        } else if (targetGroup === 'kb1-steps') {
+            targetCheckboxes = document.querySelectorAll('[data-kb1-step]');
         } else if (targetGroup === 'flash-subsets') {
             targetCheckboxes = document.querySelectorAll('[data-sentence-subset-index]');
         }
@@ -2531,6 +2784,11 @@ async function initApp() {
         renderMasterLists();
         // 6. Render the sentence subset exclusion list
         renderSentenceMasterList();
+        // 7. 漢字基礎１ tab (unlock + settings)
+        if (window.KB1) window.KB1.init({
+            decryptEncFile, flashElementColor, updateLiveEstimator, renderMasterList,
+            knownIds: () => Array.from(AppState.knownWords)
+        });
     } catch (error) {
         console.error('Failed to initialize application:', error);
     }

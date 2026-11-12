@@ -689,3 +689,104 @@ input[type="range"]::-moz-range-thumb {
     font-weight: 500;
     flex-shrink: 0;
 }
+/* --- 漢字基礎１ (Kanji Basic 1 class section) --- */
+.kb1-word {
+    font-size: 3.2rem;
+    color: var(--accent-color);
+    line-height: 1.3;
+    margin-bottom: 0.75rem;
+    word-break: keep-all;
+}
+.kb1-instruction {
+    font-size: 1rem;
+    color: var(--text-secondary);
+}
+.kb1-translation {
+    font-size: 1.05rem;
+    color: var(--text-primary);
+    margin-top: 0.75rem;
+}
+.kb1-answer {
+    font-size: 1.2rem;
+    color: var(--accent-color);
+    margin-top: 0.75rem;
+}
+.kb1-footnote {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin: 0.75rem 0 2rem;
+}
+.prompt-text .kb1-answer span {      /* keep "word = reading · meaning" on one line */
+    display: inline;
+    font-size: inherit;
+    color: inherit;
+    margin: 0;
+}
+.choice-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 1rem;
+    width: 100%;
+}
+.choice-grid.hidden { display: none; }
+.choice-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    text-align: left;
+    white-space: normal;
+    font-size: 1.15rem;
+    padding: 0.8rem 1rem;
+    min-height: 3.2rem;
+}
+.choice-btn .choice-num {
+    font-size: 0.8rem;
+    opacity: 0.55;
+    flex-shrink: 0;
+}
+.choice-btn.choice-correct {
+    border-color: var(--success-color);
+    background: rgba(76, 175, 80, 0.18);
+}
+.choice-btn.choice-wrong {
+    border-color: var(--error-color);
+    opacity: 0.7;
+}
+@media (max-width: 600px) {
+    .kb1-word { font-size: 2.6rem; }
+    .choice-grid { grid-template-columns: 1fr; }
+    .choice-btn { font-size: 1.05rem; }
+}
+.kb1-mode-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    margin: 0.5rem 0 0.25rem;
+}
+/* feedback after an answer (stays until Enter / Next) */
+.kb1-feedback { margin-top: 0.75rem; }
+.kb1-info {
+    font-size: 1.05rem;
+    color: var(--text-primary);
+    margin-top: 0.6rem;
+    line-height: 1.7;
+}
+.prompt-text .kb1-inline,
+.prompt-text .kb1-feedback span,
+.prompt-text .kb1-instruction span {   /* spans in the prompt are blocks by default: keep these inline */
+    display: inline;
+    font-size: inherit;
+    margin: 0;
+    font-weight: inherit;
+    color: inherit;
+}
+.prompt-text .kb1-inline { color: var(--accent-color); font-weight: 700; font-size: 1.2em; }
+.prompt-text .kb1-feedback .kb1-ok { color: var(--success-color); font-weight: 700; }
+.prompt-text .kb1-feedback .kb1-ng { color: var(--error-color); font-weight: 700; }
+.prompt-text .kb1-feedback .kb1-ex { color: var(--text-primary); }
+.prompt-text .kb1-feedback .kb1-ex-r,
+.prompt-text .kb1-feedback .kb1-meaning { color: var(--text-secondary); font-size: 0.9em; }
+#kb1-none-btn { margin-top: 0.75rem; }
+.choice-grid.answered .choice-btn { cursor: default; }

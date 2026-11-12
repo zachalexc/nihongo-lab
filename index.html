@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Japanese Study App</title>
-    <link rel="stylesheet" href="style.css?v=1.1">
+    <link rel="stylesheet" href="style.css?v=1.4">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         /* UI Lab Theme Overrides */
@@ -150,6 +150,7 @@
                 <button type="button" class="tab-btn" data-tab="tab-nouns">Nouns</button>
                 <button type="button" class="tab-btn" data-tab="tab-sentences">Sentences</button>
                 <button type="button" class="tab-btn" data-tab="tab-dev">Dev</button>
+                <button type="button" class="tab-btn" data-tab="tab-kb1" lang="ja">漢字基礎１</button>
             </div>
 
             <div id="tab-verbs">
@@ -540,7 +541,150 @@
                     </div>
                 </div>
             </div>
-            <!-- Flash / Listening settings, shown by updateModeUI -->
+            <div id="tab-kb1" class="hidden">
+                <div id="kb1-lock-view" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem 1rem; gap: 1rem; text-align: center;">
+                    <div style="font-size: 2.5rem; margin-bottom: 0.25rem;">🔒</div>
+                    <h3 lang="ja" style="font-size: 1.1rem; color: var(--text-primary); border: none; padding: 0; margin: 0; justify-content: center;">漢字基礎１ · Kanji Basic 1</h3>
+                    <p style="font-size: 0.9rem; color: var(--text-secondary); max-width: 360px;">Class study material. Enter the class password to unlock.</p>
+                    <div style="display: flex; gap: 0.5rem; width: 100%; max-width: 320px; margin-top: 0.5rem;">
+                        <input type="password" id="kb1-password-input" class="answer-input" placeholder="Enter password..." autocomplete="off" style="flex: 1; text-align: center; padding: 0.6rem 1rem; font-size: 1rem;">
+                        <button type="button" id="kb1-unlock-btn" class="btn btn-primary" style="padding: 0.6rem 1.2rem; font-size: 0.95rem;">Unlock</button>
+                    </div>
+                    <div id="kb1-error-msg" style="color: var(--error-color); font-size: 0.85rem; min-height: 1.2rem;"></div>
+                </div>
+                <div id="kb1-settings-view" class="hidden">
+                    <div class="settings-group" style="margin-bottom: 1rem;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+                            <span lang="ja" style="font-size: 0.85rem; color: var(--success-color); font-weight: 600;">🔓 漢字基礎１ unlocked</span>
+                            <span id="kb1-data-info" style="font-size: 0.8rem; color: var(--text-secondary);"></span>
+                        </div>
+                    </div>
+                    <div class="settings-group">
+                        <h3>Study Mode</h3>
+                        <div class="kb1-mode-label">Class drills</div>
+                        <div class="checkbox-group">
+                                <label class="checkbox-label active-option">
+                                    <input type="radio" name="kb1-mode" value="kb1-reading-typed" checked>
+                                    <span class="custom-checkbox"></span>
+                                    Word → reading (type it)
+                                </label>
+                                <label class="checkbox-label active-option">
+                                    <input type="radio" name="kb1-mode" value="kb1-reading-mc">
+                                    <span class="custom-checkbox"></span>
+                                    Word → reading (choose)
+                                </label>
+                                <label class="checkbox-label active-option">
+                                    <input type="radio" name="kb1-mode" value="kb1-meaning-mc">
+                                    <span class="custom-checkbox"></span>
+                                    Word → meaning (choose)
+                                </label>
+                                <label class="checkbox-label active-option">
+                                    <input type="radio" name="kb1-mode" value="kb1-kanji">
+                                    <span class="custom-checkbox"></span>
+                                    Kanji readings (音読み・訓読み)
+                                </label>
+                        </div>
+                        <div id="kb1-kanji-options" class="hidden">
+                            <div class="kb1-mode-label">Kanji question types (taught readings only)</div>
+                            <div class="checkbox-group">
+                            <label class="checkbox-label active-option">
+                                <input type="checkbox" id="kb1-kq-on-typed" data-kb1-kanji-type="on-typed" checked>
+                                <span class="custom-checkbox"></span>
+                                Write the on'yomi
+                            </label>
+                            <label class="checkbox-label active-option">
+                                <input type="checkbox" id="kb1-kq-kun-typed" data-kb1-kanji-type="kun-typed" checked>
+                                <span class="custom-checkbox"></span>
+                                Write the kun'yomi
+                            </label>
+                            <label class="checkbox-label active-option">
+                                <input type="checkbox" id="kb1-kq-on-mc" data-kb1-kanji-type="on-mc">
+                                <span class="custom-checkbox"></span>
+                                Choose the on'yomi
+                            </label>
+                            <label class="checkbox-label active-option">
+                                <input type="checkbox" id="kb1-kq-kun-mc" data-kb1-kanji-type="kun-mc">
+                                <span class="custom-checkbox"></span>
+                                Choose the kun'yomi
+                            </label>
+                            <label class="checkbox-label active-option">
+                                <input type="checkbox" id="kb1-kq-onkun" data-kb1-kanji-type="onkun" checked>
+                                <span class="custom-checkbox"></span>
+                                On'yomi or kun'yomi?
+                            </label>
+                            </div>
+                        </div>
+                        <div class="kb1-mode-label">App modes on class content</div>
+                        <div class="checkbox-group">
+                                <label class="checkbox-label active-option">
+                                    <input type="radio" name="kb1-mode" value="reading">
+                                    <span class="custom-checkbox"></span>
+                                    Sentence reading
+                                </label>
+                                <label class="checkbox-label active-option">
+                                    <input type="radio" name="kb1-mode" value="translation">
+                                    <span class="custom-checkbox"></span>
+                                    Meaning → word (type it)
+                                </label>
+                        </div>
+                    </div>
+                    <div class="settings-group">
+                        <h3>
+                            <span>Steps</span>
+                            <div class="bulk-actions">
+                                <button type="button" class="bulk-action-btn" data-target-group="kb1-steps" data-action="all">[All]</button>
+                                <button type="button" class="bulk-action-btn" data-target-group="kb1-steps" data-action="none">[None]</button>
+                            </div>
+                        </h3>
+                        <div class="checkbox-group">
+                                <label class="checkbox-label active-option">
+                                    <input type="checkbox" id="kb1-step-1" data-kb1-step="1" checked>
+                                    <span class="custom-checkbox"></span>
+                                    Step 1
+                                </label>
+                                <label class="checkbox-label active-option">
+                                    <input type="checkbox" id="kb1-step-2" data-kb1-step="2" checked>
+                                    <span class="custom-checkbox"></span>
+                                    Step 2
+                                </label>
+                                <label class="checkbox-label active-option">
+                                    <input type="checkbox" id="kb1-step-3" data-kb1-step="3" checked>
+                                    <span class="custom-checkbox"></span>
+                                    Step 3
+                                </label>
+                                <label class="checkbox-label active-option">
+                                    <input type="checkbox" id="kb1-step-4" data-kb1-step="4" checked>
+                                    <span class="custom-checkbox"></span>
+                                    Step 4
+                                </label>
+                                <label class="checkbox-label active-option">
+                                    <input type="checkbox" id="kb1-step-5" data-kb1-step="5" checked>
+                                    <span class="custom-checkbox"></span>
+                                    Step 5
+                                </label>
+                                <label class="checkbox-label active-option">
+                                    <input type="checkbox" id="kb1-step-6" data-kb1-step="6" checked>
+                                    <span class="custom-checkbox"></span>
+                                    Step 6
+                                </label>
+                        </div>
+                        <div class="checkbox-group" style="margin-top: 0.75rem;">
+                            <label class="checkbox-label active-option">
+                                <input type="checkbox" id="kb1-include-extra">
+                                <span class="custom-checkbox"></span>
+                                Include extra vocabulary (not on the handouts)
+                            </label>
+                        </div>
+                    </div>
+                    <details class="master-list-accordion">
+                        <summary>Learned Words (Check to Exclude)</summary>
+                        <div class="checkbox-grid" id="master-list-kb1"></div>
+                    </details>
+                    <p class="kb1-footnote">Class use only. Dictionary data: JMdict/KANJIDIC2 (EDRDG, CC BY-SA 4.0). Stroke diagrams: KanjiVG (CC BY-SA 3.0).</p>
+                </div>
+            </div>
+
+            <!-- Flash / Listening settings: shared by the Sentences and 漢字基礎１ tabs (shown by updateModeUI) -->
             <div id="flash-settings-container" class="hidden">
                 <div class="settings-group">
                     <h3>Flash Display Mode</h3>
@@ -672,6 +816,9 @@
                         <button class="btn btn-secondary group-btn" data-answer="group2">Group II</button>
                         <button class="btn btn-secondary group-btn" data-answer="group3">Group III</button>
                     </div>
+
+                    <div id="choice-buttons-container" class="choice-grid hidden"></div>
+                    <button type="button" id="kb1-none-btn" class="btn btn-secondary hidden" lang="ja">なし / none</button>
                 </div>
                 
                 <div class="study-actions" style="margin-top: 2rem;">
@@ -691,6 +838,8 @@
     </div>
 
     <script src="https://unpkg.com/wanakana"></script>
-    <script src="app.js?v=1.2"></script>
+    <script src="kb1_core.js?v=1.2"></script>
+    <script src="kb1.js?v=1.2"></script>
+    <script src="app.js?v=1.4"></script>
 </body>
 </html>

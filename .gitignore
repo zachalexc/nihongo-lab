@@ -1,0 +1,8 @@
+# Kanji Basic 1 (漢字基礎１) class data: the plaintext must never be committed.
+# Only the encrypted kb1.enc belongs in this repo. Sources and build scripts live in
+# ..\nihongo-lab-private\ (outside the repo).
+*.plain.json
+kanji_basic1.json
+sentences_src.txt
+kb1_bundle*.json
+kb1_sentences.json
