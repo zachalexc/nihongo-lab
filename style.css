@@ -826,3 +826,6 @@ input[type="range"]::-moz-range-thumb {
     .kb1-results table { font-size: 0.82rem; }
     .kb1-results th, .kb1-results td { padding: 0.25rem 0.35rem; }
 }
+/* kun'yomi / on'yomi reminders */
+.prompt-text .kb1-feedback .kb1-kind, .kb1-kind { display: inline; font-size: 0.8em; color: var(--text-secondary); margin: 0; }
+.kb1-legend { font-size: 0.8rem; color: var(--text-secondary); margin: 0.25rem 0 0.5rem; line-height: 1.6; }

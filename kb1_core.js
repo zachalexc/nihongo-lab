@@ -113,7 +113,7 @@
         });
     }
 
-    // ---- kanji readings (音読み / 訓読み): only the readings taught in class ---------------
+    // ---- kanji readings (訓読み / 音読み): only the readings taught in class ---------------
     const KANA_SEP = /[\s・、,，\/／]+/;
     const NONE_LABEL = 'none (なし)';
     const NONE_INPUTS = new Set(['なし', 'none', 'ない', 'ナシ']);
@@ -127,8 +127,11 @@
         return k.kb1.kun_readings.map(r => ({ label: r.text, forms: [r.kana, r.stem, ...r.variants] }));
     }
 
+    // Kun'yomi first everywhere, each with a reminder of what it is
     const KIND_NAME = { on: "on'yomi", kun: "kun'yomi" };
     const KIND_JA = { on: '音読み', kun: '訓読み' };
+    const KIND_HINT = { on: 'Chinese reading', kun: 'Japanese reading' };
+    const KIND_FULL = { on: "on'yomi 音 (Chinese reading)", kun: "kun'yomi 訓 (Japanese reading)" };
 
     function kanjiPrompt(k, line) {
         return `<div class="kb1-word" lang="ja">${escapeHtml(k.base.kanji)}</div><div class="kb1-instruction">${line}</div>`;
@@ -149,7 +152,7 @@
         return Object.assign(kanjiBase(k, `kanji-${kind}-typed`), {
             kind, expected,
             allowNone: kind === 'kun',      // always offered for kun, so it gives nothing away
-            promptText: kanjiPrompt(k, `Write the ${KIND_NAME[kind]} (${KIND_JA[kind]})${how}` +
+            promptText: kanjiPrompt(k, `Write the ${KIND_NAME[kind]} (${KIND_JA[kind]} · ${KIND_HINT[kind]})${how}` +
                 (kind === 'kun' ? ' — okurigana optional' : '') + (kind === 'on' ? ' in hiragana' : '')),
             correctAnswerKana: n ? expected.map(e => e.label).join('・') : 'なし',
             readText: n ? expected[0].forms[0] : '',
@@ -200,7 +203,7 @@
         // keep the other-type trap, shuffle the rest in
         return Object.assign(kanjiBase(k, `kanji-${kind}-mc`), {
             kind,
-            promptText: kanjiPrompt(k, `${line} (${KIND_JA[kind]})`),
+            promptText: kanjiPrompt(k, `${line} (${KIND_JA[kind]} · ${KIND_HINT[kind]})`),
             choices: shuffle([correct, ...wrong], rng),
             choicesLang: 'ja',
             correctAnswer: correct,
@@ -208,21 +211,21 @@
         });
     }
 
-    const ON_KUN_CHOICES = ["on'yomi (音)", "kun'yomi (訓)"];
+    const ON_KUN_CHOICES = ["kun'yomi 訓 (Japanese)", "on'yomi 音 (Chinese)"];   // kun first: key 1 = kun
     function kanjiOnOrKun(k, rng) {
         const options = [...taught(k, 'on').map(e => ['on', e.label]), ...taught(k, 'kun').map(e => ['kun', e.label])];
         const [kind, label] = options[Math.floor(rng() * options.length)];
         return Object.assign(kanjiBase(k, 'kanji-onkun'), {
             kind, asked: label,
-            promptText: kanjiPrompt(k, `Is <span class="kb1-inline" lang="ja">${escapeHtml(label)}</span> an on'yomi or a kun'yomi of this kanji?`),
+            promptText: kanjiPrompt(k, `Is <span class="kb1-inline" lang="ja">${escapeHtml(label)}</span> a kun'yomi (Japanese) or an on'yomi (Chinese) reading of this kanji?`),
             choices: [...ON_KUN_CHOICES],
             choicesFixedOrder: true,
-            correctAnswer: kind === 'on' ? ON_KUN_CHOICES[0] : ON_KUN_CHOICES[1],
+            correctAnswer: kind === 'kun' ? ON_KUN_CHOICES[0] : ON_KUN_CHOICES[1],
             correctAnswerKana: label,
         });
     }
 
-    const KANJI_TYPES = ['on-typed', 'kun-typed', 'on-mc', 'kun-mc', 'onkun'];
+    const KANJI_TYPES = ['kun-typed', 'on-typed', 'kun-mc', 'on-mc', 'onkun'];
 
     function kanjiQuestions(kanjiList, types, rng = Math.random) {
         const out = [];
@@ -246,7 +249,8 @@
         const ex = (k.kb1.examples || []).map(([w, r, , , inClass]) =>
             `${escapeHtml(w)}<span class="kb1-ex-r">（${escapeHtml(r)}）</span>` +
             (inClass === false ? '<span class="kb1-extra-tag">extra</span>' : '')).join('、');
-        return `<div class="kb1-info" lang="ja"><b>${escapeHtml(k.base.kanji)}</b>　訓: ${escapeHtml(kun)}　／　音: ${escapeHtml(on)}` +
+        return `<div class="kb1-info" lang="ja"><b>${escapeHtml(k.base.kanji)}</b>　訓 <span class="kb1-kind">kun (Japanese)</span>: ${escapeHtml(kun)}` +
+            `　／　音 <span class="kb1-kind">on (Chinese)</span>: ${escapeHtml(on)}` +
             (sp ? `　／　特別: ${escapeHtml(sp)}` : '') + `<br><span class="kb1-ex">${ex}</span>` +
             `<span class="kb1-meaning"> · ${escapeHtml(k.meaning)}</span></div>`;
     }
@@ -349,9 +353,9 @@
         'w-typed':  "Word → reading (type)",
         'w-mc':     "Word → reading (choose)",
         'w-meaning':"Word → meaning",
-        'k-typed':  "On'yomi / kun'yomi (type)",
-        'k-mc':     "On'yomi / kun'yomi (choose)",
-        'k-onkun':  "On'yomi or kun'yomi?",
+        'k-typed':  "Kun'yomi / on'yomi (type)",
+        'k-mc':     "Kun'yomi / on'yomi (choose)",
+        'k-onkun':  "Kun'yomi or on'yomi?",
         'which':    "Which reading is used",
         'special':  "※ Special readings",
     };
@@ -379,8 +383,8 @@
                 'w-typed': shuffle(src.words.filter(w => stepOf(w) === st), rng),
                 'w-mc': shuffle(src.words.filter(w => stepOf(w) === st), rng),
                 'w-meaning': shuffle(src.words.filter(w => stepOf(w) === st), rng),
-                'k-typed': shuffle((src.kanji || []).filter(k => stepOf(k) === st).flatMap(k => [[k, 'on'], [k, 'kun']]), rng),
-                'k-mc': shuffle((src.kanji || []).filter(k => stepOf(k) === st).flatMap(k => [[k, 'on'], [k, 'kun']]), rng),
+                'k-typed': shuffle((src.kanji || []).filter(k => stepOf(k) === st).flatMap(k => [[k, 'kun'], [k, 'on']]), rng),
+                'k-mc': shuffle((src.kanji || []).filter(k => stepOf(k) === st).flatMap(k => [[k, 'kun'], [k, 'on']]), rng),
                 'k-onkun': shuffle((src.kanji || []).filter(k => stepOf(k) === st), rng),
                 'which': shuffle(whichItems(src.words.filter(w => stepOf(w) === st), kanjiByChar), rng),
                 'special': shuffle((src.special || []).filter(w => stepOf(w) === st && (w.kb1.in_class || opts.includeExtra)), rng),
@@ -432,8 +436,8 @@
             const isKanji = q.qtype.startsWith('kanji-');
             const k = isKanji && lookupKanji ? lookupKanji(q.kanjiId) : null;
             const what = q.qtype.startsWith('which') ? `${escapeHtml(q.askedKanji)} in ${escapeHtml(q.revealText)}` : escapeHtml(q.revealText);
-            const correct = q.qtype === 'kanji-onkun' ? `${escapeHtml(q.asked)} = ${q.kind === 'on' ? "on'yomi" : "kun'yomi"}` : escapeHtml(q.correctAnswer || q.correctAnswerKana);
-            const detail = k ? `訓: ${escapeHtml(taught(k, 'kun').map(e => e.label).join('・') || 'なし')} ／ 音: ${escapeHtml(taught(k, 'on').map(e => e.label).join('・'))}`
+            const correct = q.qtype === 'kanji-onkun' ? `${escapeHtml(q.asked)} = ${escapeHtml(KIND_FULL[q.kind])}` : escapeHtml(q.correctAnswer || q.correctAnswerKana);
+            const detail = k ? `訓 kun (Japanese): ${escapeHtml(taught(k, 'kun').map(e => e.label).join('・') || 'なし')} ／ 音 on (Chinese): ${escapeHtml(taught(k, 'on').map(e => e.label).join('・'))}`
                 : `${escapeHtml(q.readText || '')} · ${escapeHtml(q.revealMeaning || '')}`;
             return `<tr><td lang="ja">${what}</td><td>${escapeHtml(EXAM_TYPES[q.examType] || '')}</td>` +
                 `<td lang="ja">${r.answer == null || r.answer === '' ? '<i>skipped</i>' : escapeHtml(r.answer)}</td>` +
@@ -462,7 +466,7 @@
             if (q.choices) {
                 const c = given === q.correctAnswer;
                 const line = q.qtype === 'kanji-onkun'
-                    ? `${escapeHtml(q.asked)} is ${q.kind === 'on' ? "an on'yomi (音)" : "a kun'yomi (訓)"}`
+                    ? `${escapeHtml(q.asked)} is ${q.kind === 'on' ? 'an' : 'a'} ${escapeHtml(KIND_FULL[q.kind])}`
                     : `Answer: ${escapeHtml(q.correctAnswer)}`;
                 return ok(c, `<div class="kb1-answer">${mark(c)} ${line}</div>${info}`);
             }
@@ -490,7 +494,7 @@
                 : (toHira(given) === q.correctAnswerKana || (q.acceptAnswers || []).includes(toHira(given))));
             const k = lookupKanji ? lookupKanji(q.kanjiId) : null;
             return ok(c, `<div class="kb1-answer">${mark(c)} <span lang="ja">${escapeHtml(q.correctAnswerKana)}</span> ` +
-                `(${q.partType === 'on' ? "on'yomi" : "kun'yomi"}) — <span lang="ja">${escapeHtml(q.revealText)}</span> = ` +
+                `(${escapeHtml(KIND_FULL[q.partType])}) — <span lang="ja">${escapeHtml(q.revealText)}</span> = ` +
                 `<span lang="ja">${escapeHtml(q.readText)}</span> · ${escapeHtml(q.revealMeaning)}</div>` + (k ? kanjiInfoHtml(k) : ''));
         }
 

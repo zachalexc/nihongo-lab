@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Japanese Study App</title>
-    <link rel="stylesheet" href="style.css?v=1.6">
+    <link rel="stylesheet" href="style.css?v=1.7">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         /* UI Lab Theme Overrides */
@@ -629,7 +629,7 @@
                                 <label class="checkbox-label active-option">
                                     <input type="radio" name="kb1-mode" value="kb1-kanji">
                                     <span class="custom-checkbox"></span>
-                                    Kanji readings (音読み・訓読み)
+                                    Kanji readings (訓読み・音読み)
                                 </label>
                                 <label class="checkbox-label active-option">
                                     <input type="radio" name="kb1-mode" value="kb1-which-typed">
@@ -654,31 +654,32 @@
                         </div>
                         <div id="kb1-kanji-options" class="hidden">
                             <div class="kb1-mode-label">Kanji question types (taught readings only)</div>
+                            <p class="kb1-legend" lang="ja">訓読み <b>kun'yomi</b> = the Japanese reading (often with okurigana, e.g. い(きる)) · 音読み <b>on'yomi</b> = the reading from Chinese (e.g. せい in 学生)</p>
                             <div class="checkbox-group">
-                            <label class="checkbox-label active-option">
-                                <input type="checkbox" id="kb1-kq-on-typed" data-kb1-kanji-type="on-typed" checked>
-                                <span class="custom-checkbox"></span>
-                                Write the on'yomi
-                            </label>
                             <label class="checkbox-label active-option">
                                 <input type="checkbox" id="kb1-kq-kun-typed" data-kb1-kanji-type="kun-typed" checked>
                                 <span class="custom-checkbox"></span>
-                                Write the kun'yomi
+                                Write the kun'yomi 訓 (Japanese reading)
                             </label>
                             <label class="checkbox-label active-option">
-                                <input type="checkbox" id="kb1-kq-on-mc" data-kb1-kanji-type="on-mc">
+                                <input type="checkbox" id="kb1-kq-on-typed" data-kb1-kanji-type="on-typed" checked>
                                 <span class="custom-checkbox"></span>
-                                Choose the on'yomi
+                                Write the on'yomi 音 (Chinese reading)
                             </label>
                             <label class="checkbox-label active-option">
                                 <input type="checkbox" id="kb1-kq-kun-mc" data-kb1-kanji-type="kun-mc">
                                 <span class="custom-checkbox"></span>
-                                Choose the kun'yomi
+                                Choose the kun'yomi 訓 (Japanese reading)
+                            </label>
+                            <label class="checkbox-label active-option">
+                                <input type="checkbox" id="kb1-kq-on-mc" data-kb1-kanji-type="on-mc">
+                                <span class="custom-checkbox"></span>
+                                Choose the on'yomi 音 (Chinese reading)
                             </label>
                             <label class="checkbox-label active-option">
                                 <input type="checkbox" id="kb1-kq-onkun" data-kb1-kanji-type="onkun" checked>
                                 <span class="custom-checkbox"></span>
-                                On'yomi or kun'yomi?
+                                Kun'yomi or on'yomi?
                             </label>
                             </div>
                         </div>
@@ -720,17 +721,17 @@
                                 <label class="checkbox-label active-option">
                                     <input type="checkbox" id="kb1-exam-k-typed" data-kb1-exam-type="k-typed" checked>
                                     <span class="custom-checkbox"></span>
-                                    On'yomi / kun'yomi (type)
+                                    Kun'yomi / on'yomi (type)
                                 </label>
                                 <label class="checkbox-label active-option">
                                     <input type="checkbox" id="kb1-exam-k-mc" data-kb1-exam-type="k-mc" checked>
                                     <span class="custom-checkbox"></span>
-                                    On'yomi / kun'yomi (choose)
+                                    Kun'yomi / on'yomi (choose)
                                 </label>
                                 <label class="checkbox-label active-option">
                                     <input type="checkbox" id="kb1-exam-k-onkun" data-kb1-exam-type="k-onkun" checked>
                                     <span class="custom-checkbox"></span>
-                                    On'yomi or kun'yomi?
+                                    Kun'yomi or on'yomi?
                                 </label>
                                 <label class="checkbox-label active-option">
                                     <input type="checkbox" id="kb1-exam-which" data-kb1-exam-type="which" checked>
@@ -921,7 +922,7 @@
     </div>
 
     <script src="https://unpkg.com/wanakana"></script>
-    <script src="kb1_core.js?v=1.4"></script>
+    <script src="kb1_core.js?v=1.5"></script>
     <script src="kb1.js?v=1.4"></script>
     <script src="app.js?v=1.7"></script>
 </body>
