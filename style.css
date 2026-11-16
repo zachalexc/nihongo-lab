@@ -801,6 +801,29 @@ input[type="range"]::-moz-range-thumb {
     padding: 0.05em 0.45em; border-radius: 999px; vertical-align: middle;
     color: var(--text-secondary); border: 1px solid var(--border-color);
 }
+/* Kanji readings feedback: one line per taught reading with class words */
+.kb1-yours { font-size: 0.95rem; color: var(--text-secondary); margin-bottom: 0.35rem; }
+.prompt-text .kb1-yours span[lang="ja"] { color: var(--text-primary); font-weight: 600; }
+.kb1-rinfo { text-align: left; max-width: 40rem; margin: 0.8rem auto 0; font-size: 1rem; line-height: 1.6; }
+.kb1-rhead { margin-bottom: 0.2rem; }
+.kb1-rhead b { font-size: 1.6em; color: var(--text-primary); margin-right: 0.5em; }
+.prompt-text .kb1-feedback .kb1-rhead .kb1-meaning { font-size: 1em; }
+.kb1-rkind { font-size: 0.8rem; font-weight: 600; letter-spacing: 0.02em; color: var(--accent-color); margin: 0.5rem 0 0.1rem; }
+.kb1-rrow { display: grid; grid-template-columns: minmax(4.5em, max-content) 1fr; gap: 0.6em; padding: 0.15rem 0; border-top: 1px solid var(--border-color); }
+.prompt-text .kb1-feedback .kb1-rlabel { font-weight: 700; color: var(--text-primary); white-space: nowrap; }
+.prompt-text .kb1-feedback .kb1-rw { white-space: nowrap; color: var(--text-primary); }
+.prompt-text .kb1-feedback .kb1-rsep, .prompt-text .kb1-feedback .kb1-rnone { color: var(--text-secondary); }
+.prompt-text .kb1-feedback .kb1-rnone { font-size: 0.85em; font-style: italic; }
+.prompt-text .kb1-feedback .kb1-rnote { color: var(--text-secondary); font-size: 0.75em; margin-left: 0.3em; }
+.prompt-text .kb1-feedback .kb1-own-tag {
+    display: inline-block; font-size: 0.68rem; margin-left: 0.35em; padding: 0 0.4em; border-radius: 999px;
+    color: var(--text-secondary); border: 1px dashed var(--border-color); vertical-align: middle;
+}
+@media (max-width: 600px) {
+    .kb1-rrow { grid-template-columns: minmax(3.6em, max-content) 1fr; gap: 0.5em; }
+    .prompt-text .kb1-feedback .kb1-rw { display: block; white-space: normal; }   /* one word per line on phones */
+    .prompt-text .kb1-feedback .kb1-rsep { display: none; }
+}
 /* mock exam */
 .kb1-exam-row { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: 0.5rem 0; color: var(--text-secondary); font-size: 0.9rem; }
 .kb1-exam-row label { display: flex; align-items: center; gap: 0.5rem; }

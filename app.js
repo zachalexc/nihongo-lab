@@ -1358,6 +1358,8 @@ function gradeClassQuestion(question, submittedAnswer) {
         if (!result.correct && submittedAnswer != null) markChoice(submittedAnswer, 'choice-wrong');
     }
     UI.promptText.innerHTML += `<div class="kb1-feedback">${result.html}</div>`;
+    // Kanji readings: the typed answer is repeated in the feedback, so the box can go until the next card
+    if (question.qtype && question.qtype.startsWith('kanji-') && !question.choices) UI.answerInput.classList.add('hidden');
     if (!result.correct && question.readText && UI.audioToggleCheckbox.checked) speakJapanese(question.readText);
     if (result.correct && question.readText && UI.audioToggleCorrectCheckbox && UI.audioToggleCorrectCheckbox.checked) speakJapanese(question.readText);
     waitForNext(() => {

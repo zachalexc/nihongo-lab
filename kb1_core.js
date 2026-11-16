@@ -255,6 +255,34 @@
             `<span class="kb1-meaning"> · ${escapeHtml(k.meaning)}</span></div>`;
     }
 
+    // Kanji readings mode: every taught reading on its own line with class words that use it
+    // (kanji highlighted, reading, meaning). Falls back to the short summary for older bundles.
+    function kanjiReadingsHtml(k) {
+        const rx = k.kb1.reading_examples;
+        if (!rx) return kanjiInfoHtml(k);
+        const ch = k.base.kanji;
+        const hl = t => escapeHtml(t).split(escapeHtml(ch)).join(`<span class="kb1-hl">${escapeHtml(ch)}</span>`);
+        const word = ([text, reading, , meaning, fromHandout, change]) =>
+            `<span class="kb1-rw">${hl(text)}<span class="kb1-ex-r">（${escapeHtml(reading)}${meaning ? `, <span lang="en">${escapeHtml(meaning)}</span>` : ''}）</span>` +
+            (change ? `<span class="kb1-rnote">${escapeHtml(change)}</span>` : '') +
+            (fromHandout === false ? '<span class="kb1-own-tag" lang="en">not on handouts</span>' : '') + '</span>';
+        const row = (label, words) => `<div class="kb1-rrow"><span class="kb1-rlabel">${escapeHtml(label)}</span>` +
+            `<span class="kb1-rwords">${words.length ? words.map(word).join('<span class="kb1-rsep"> · </span>')
+                : '<span class="kb1-rnone" lang="en">no class word uses this reading</span>'}</span></div>`;
+        const group = (kind, head) => {
+            const t = taught(k, kind);
+            const rows = t.length ? t.map((e, i) => row(e.label, (rx[kind] || [])[i] || [])).join('')
+                : `<div class="kb1-rrow"><span class="kb1-rlabel">なし</span><span class="kb1-rwords"><span class="kb1-rnone" lang="en">none taught</span></span></div>`;
+            return `<div class="kb1-rkind" lang="en">${head}</div>${rows}`;
+        };
+        const sp = (rx.special || []).length
+            ? `<div class="kb1-rkind" lang="en">※ special readings (whole word)</div><div class="kb1-rrow"><span class="kb1-rlabel">※</span>` +
+              `<span class="kb1-rwords">${rx.special.map(word).join('<span class="kb1-rsep"> · </span>')}</span></div>` : '';
+        return `<div class="kb1-info kb1-rinfo" lang="ja"><div class="kb1-rhead"><b>${escapeHtml(ch)}</b>` +
+            `<span class="kb1-meaning" lang="en">${escapeHtml(k.meaning)}</span></div>` +
+            group('kun', "訓 kun'yomi (Japanese reading)") + group('on', "音 on'yomi (Chinese reading)") + sp + '</div>';
+    }
+
     // Match typed readings to the expected ones (any order). Returns per-expected hits and stray tokens.
     function matchReadings(tokens, expected) {
         const norm = t => stripParens(toHira(t));
@@ -462,7 +490,7 @@
 
         if (q.qtype && q.qtype.startsWith('kanji-')) {
             const k = lookupKanji ? lookupKanji(q.kanjiId) : null;
-            const info = k ? kanjiInfoHtml(k) : '';
+            const info = (k ? kanjiReadingsHtml(k) : '');
             if (q.choices) {
                 const c = given === q.correctAnswer;
                 const line = q.qtype === 'kanji-onkun'
@@ -470,22 +498,24 @@
                     : `Answer: ${escapeHtml(q.correctAnswer)}`;
                 return ok(c, `<div class="kb1-answer">${mark(c)} ${line}</div>${info}`);
             }
-            // typed
+            // typed: the answer box is hidden on the feedback screen, so repeat what was typed
             const exp = q.expected;
-            if (given === null) return ok(false, `<div class="kb1-answer">${mark(false)} ${escapeHtml(q.correctAnswerKana)}</div>${info}`);
+            const yours = given ? `<div class="kb1-yours"><span lang="en">Your answer:</span> <span lang="ja">${escapeHtml(given)}</span></div>` : '';
+            const okT = (c, html) => ok(c, yours + html);
+            if (given === null) return okT(false, `<div class="kb1-answer">${mark(false)} ${escapeHtml(q.correctAnswerKana)}</div>${info}`);
             const tokens = given.replace(/[()（）]/g, m => m === '（' ? '(' : m === '）' ? ')' : m).split(KANA_SEP).filter(Boolean);
             if (!exp.length) {
                 const c = tokens.length > 0 && tokens.every(t => NONE_INPUTS.has(t.toLowerCase()));
-                return ok(c, `<div class="kb1-answer">${mark(c)} No ${KIND_NAME[q.kind]} was taught for this kanji (なし)</div>${info}`);
+                return okT(c, `<div class="kb1-answer">${mark(c)} No ${KIND_NAME[q.kind]} was taught for this kanji (なし)</div>${info}`);
             }
             if (tokens.some(t => NONE_INPUTS.has(t.toLowerCase()))) {
-                return ok(false, `<div class="kb1-answer">${mark(false)} ${escapeHtml(q.correctAnswerKana)}</div>${info}`);
+                return okT(false, `<div class="kb1-answer">${mark(false)} ${escapeHtml(q.correctAnswerKana)}</div>${info}`);
             }
             const { used, stray } = matchReadings(tokens, exp);
             const c = used.every(Boolean) && stray.length === 0;
             const parts = exp.map((e, i) => `${mark(used[i])} ${escapeHtml(e.label)}`).join('　');
             const extra = stray.length ? `　${mark(false)} <s>${escapeHtml(stray.join('・'))}</s>` : '';
-            return ok(c, `<div class="kb1-answer">${parts}${extra}</div>${info}`);
+            return okT(c, `<div class="kb1-answer">${parts}${extra}</div>${info}`);
         }
 
         // which reading: typed or chosen; feedback = the word + the kanji's taught readings
@@ -551,7 +581,7 @@
 
     return { NEW_MODES, SENTENCE_MODES, KANJI_TYPES, NONE_LABEL, shuffle, escapeHtml, hasKatakana,
              selectWords, selectSentences, selectKanji, readingTyped, readingChoice, meaningChoice,
-             kanjiTyped, kanjiChoice, kanjiOnOrKun, kanjiQuestions, kanjiInfoHtml, taught,
+             kanjiTyped, kanjiChoice, kanjiOnOrKun, kanjiQuestions, kanjiInfoHtml, kanjiReadingsHtml, taught,
              whichItems, whichQuestion, specialWords, specialQuestion, EXAM_TYPES, buildExam, examResultsHtml,
              grade, buildQueue, estimate, checkTyped };
 });
