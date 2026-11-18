@@ -809,9 +809,11 @@ input[type="range"]::-moz-range-thumb {
 .kb1-rhead b { font-size: 1.6em; color: var(--text-primary); margin-right: 0.5em; }
 .prompt-text .kb1-feedback .kb1-rhead .kb1-meaning { font-size: 1em; }
 .kb1-rkind { font-size: 0.8rem; font-weight: 600; letter-spacing: 0.02em; color: var(--accent-color); margin: 0.5rem 0 0.1rem; }
-.kb1-rrow { display: grid; grid-template-columns: minmax(4.5em, max-content) 1fr; gap: 0.6em; padding: 0.15rem 0; border-top: 1px solid var(--border-color); }
+.kb1-rrow { display: grid; grid-template-columns: minmax(4.5em, max-content) minmax(0, 1fr); gap: 0.6em; padding: 0.15rem 0; border-top: 1px solid var(--border-color); }
 .prompt-text .kb1-feedback .kb1-rlabel { font-weight: 700; color: var(--text-primary); white-space: nowrap; }
-.prompt-text .kb1-feedback .kb1-rw { white-space: nowrap; color: var(--text-primary); }
+.kb1-rwords { min-width: 0; }
+/* each example moves to the next line as a whole; only one wider than the column wraps inside */
+.prompt-text .kb1-feedback .kb1-rw { display: inline-block; max-width: 100%; white-space: normal; vertical-align: top; color: var(--text-primary); }
 .prompt-text .kb1-feedback .kb1-rsep, .prompt-text .kb1-feedback .kb1-rnone { color: var(--text-secondary); }
 .prompt-text .kb1-feedback .kb1-rnone { font-size: 0.85em; font-style: italic; }
 .prompt-text .kb1-feedback .kb1-rnote { color: var(--text-secondary); font-size: 0.75em; margin-left: 0.3em; }
@@ -820,7 +822,7 @@ input[type="range"]::-moz-range-thumb {
     color: var(--text-secondary); border: 1px dashed var(--border-color); vertical-align: middle;
 }
 @media (max-width: 600px) {
-    .kb1-rrow { grid-template-columns: minmax(3.6em, max-content) 1fr; gap: 0.5em; }
+    .kb1-rrow { grid-template-columns: minmax(3.6em, max-content) minmax(0, 1fr); gap: 0.5em; }
     .prompt-text .kb1-feedback .kb1-rw { display: block; white-space: normal; }   /* one word per line on phones */
     .prompt-text .kb1-feedback .kb1-rsep { display: none; }
 }
