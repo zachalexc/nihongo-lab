@@ -38,6 +38,7 @@ const AppState = {
     currentCategory: 'verb',
     knownWords: new Set(),
     isCorrectionMode: false,
+    kb1Retype: null,             // 漢字基礎１: the missed question whose answer must be retyped
     flashTimer: null,
     sessionResults: [],
     activeFuriganaIndex: -1,
@@ -1107,6 +1108,12 @@ async function evaluateAnswer(submittedAnswer) {
         runPendingNext();
         return;
     }
+    // 漢字基礎１: after a miss, the correct answer must be typed (or its button chosen) to move on
+    if (AppState.kb1Retype) {
+        AppState.lastSubmitTime = now;
+        checkRetype(submittedAnswer);
+        return;
+    }
 
     AppState.isGrading = true;
     AppState.lastSubmitTime = now;
@@ -1362,24 +1369,106 @@ function gradeClassQuestion(question, submittedAnswer) {
     if (question.qtype && question.qtype.startsWith('kanji-') && !question.choices) UI.answerInput.classList.add('hidden');
     if (!result.correct && question.readText && UI.audioToggleCheckbox.checked) speakJapanese(question.readText);
     if (result.correct && question.readText && UI.audioToggleCorrectCheckbox && UI.audioToggleCorrectCheckbox.checked) speakJapanese(question.readText);
+    // a miss: retype (or choose) the correct answer -- if the setting is on; never for kun'yomi-or-on'yomi,
+    // where pressing a button again adds nothing over reading the answer
+    if (!result.correct && retypeAfterMiss(question)) { startRetype(question); return; }
     waitForNext(() => {
+        if (!result.correct) { requeueMissed(); loadNextQuestion(); return; }
         const q = AppState.studyQueue.shift();
-        if (result.correct) {
-            if (q.step === 1) {          // answered right after an earlier miss: one more check later
-                q.step = 2;
-                const finalDelay = parseInt(UI.srsFinalDelay?.value, 10) || 10;
-                AppState.studyQueue.splice(Math.min(finalDelay, AppState.studyQueue.length), 0, q);
-            } else {
-                AppState.completedCount++;
-            }
-        } else {                          // missed: comes back a few cards later
-            q.step = 1;
-            const initialDelay = parseInt(UI.srsInitialDelay?.value, 10) || 4;
-            AppState.studyQueue.splice(Math.min(initialDelay, AppState.studyQueue.length), 0, q);
+        if (q.step === 1) {              // answered right after an earlier miss: one more check later
+            q.step = 2;
+            const finalDelay = parseInt(UI.srsFinalDelay?.value, 10) || 10;
+            AppState.studyQueue.splice(Math.min(finalDelay, AppState.studyQueue.length), 0, q);
+        } else {
+            AppState.completedCount++;
         }
         loadNextQuestion();
     });
 }
+
+function retypeAfterMiss(question) {
+    const box = document.getElementById('kb1-retype');
+    return (!box || box.checked) && question.qtype !== 'kanji-onkun';
+}
+
+// Missed: the card comes back a few cards later
+function requeueMissed() {
+    const q = AppState.studyQueue.shift();
+    q.step = 1;
+    const initialDelay = parseInt(UI.srsInitialDelay?.value, 10) || 4;
+    AppState.studyQueue.splice(Math.min(initialDelay, AppState.studyQueue.length), 0, q);
+}
+
+// After a miss (or Reveal): the feedback stays, and the correct answer has to be typed -- graded by the
+// same rules as the first try -- or, for buttons, the correct button chosen. Skip (click / tap only) bypasses.
+function startRetype(question) {
+    AppState.kb1Retype = question;
+    AppState.isGrading = false;
+    const typed = !question.choices;
+    UI.revealBtn.classList.add('hidden');
+    UI.skipBtn.classList.remove('hidden');
+    UI.skipBtn.tabIndex = -1;            // no keyboard route to Skip here: click / tap only
+    UI.skipBtn.title = 'Move on without retyping (the card still comes back later)';
+    if (typed) {
+        UI.answerInput.classList.remove('hidden');
+        UI.answerInput.readOnly = false;
+        UI.answerInput.value = '';
+        AppState.retypePlaceholder = UI.answerInput.placeholder;
+        UI.answerInput.placeholder = 'Type the correct answer…';
+        UI.submitBtn.textContent = 'Next →';
+        UI.submitBtn.classList.remove('hidden');
+        UI.submitBtn.disabled = true;     // greyed out until something is typed
+        if (UI.kb1NoneBtn) UI.kb1NoneBtn.classList.toggle('hidden', !question.allowNone);
+        UI.answerInput.focus();
+    } else {
+        if (UI.choiceBtnsContainer) UI.choiceBtnsContainer.classList.remove('answered');
+        if (UI.kb1NoneBtn) UI.kb1NoneBtn.classList.add('hidden');
+        document.activeElement && document.activeElement.blur && document.activeElement.blur();
+    }
+}
+
+function checkRetype(answer) {
+    const q = AppState.kb1Retype;
+    const typed = !q.choices;
+    if (typed && String(answer || '').trim() === '' && !KB1Core.grade(q, '', findWordById).correct) return;   // empty Enter: nothing
+    const ok = KB1Core.grade(q, answer, findWordById).correct;
+    const target = typed ? UI.answerInput : UI.choiceBtnsContainer;
+    if (!ok) {
+        flashElementColor(target, 'var(--error-color)');
+        if (typed) { UI.answerInput.value = ''; UI.submitBtn.disabled = true; UI.answerInput.focus(); }
+        return;
+    }
+    flashElementColor(target, 'var(--success-color)');
+    AppState.isGrading = true;
+    endRetype();
+    requeueMissed();
+    setTimeout(() => { AppState.isGrading = false; loadNextQuestion(); }, 300);
+}
+
+function skipRetype() {
+    if (!AppState.kb1Retype || AppState.isGrading) return;
+    endRetype();
+    requeueMissed();
+    if (UI.choiceBtnsContainer) clearElementFlash(UI.choiceBtnsContainer);
+    clearElementFlash(UI.answerInput);
+    loadNextQuestion();
+}
+
+function endRetype() {
+    if (!AppState.kb1Retype) return;
+    AppState.kb1Retype = null;
+    UI.skipBtn.removeAttribute('tabindex');
+    UI.skipBtn.title = 'Skip this card without marking it correct or incorrect';
+    if (AppState.retypePlaceholder != null) UI.answerInput.placeholder = AppState.retypePlaceholder;
+    AppState.retypePlaceholder = null;
+    UI.submitBtn.textContent = 'Submit';
+    UI.submitBtn.disabled = false;
+}
+
+// Retype: Next → is usable only once something is typed
+UI.answerInput.addEventListener('input', () => {
+    if (AppState.kb1Retype && !AppState.kb1Retype.choices) UI.submitBtn.disabled = UI.answerInput.value.trim() === '';
+});
 
 // --- 漢字基礎１ mock exam ---
 function startExamState(opts) {
@@ -1461,6 +1550,7 @@ function waitForNext(continuation) {
 }
 
 function clearPendingNext() {
+    endRetype();
     AppState.pendingNext = null;
     UI.submitBtn.textContent = 'Submit';
     UI.skipBtn.classList.remove('hidden');
@@ -1482,7 +1572,7 @@ function runPendingNext() {
 // total along with the queue so "completed / total" still reaches 100%
 // instead of permanently falling short by one for every skipped card.
 function skipCurrentQuestion() {
-    if (AppState.pendingNext) return;
+    if (AppState.pendingNext || AppState.kb1Retype) return;
     const now = Date.now();
     if (AppState.isGrading || (now - AppState.lastSubmitTime < 300)) return;
     if (AppState.studyQueue.length === 0) return;
@@ -2550,7 +2640,10 @@ UI.submitBtn.addEventListener('click', () => {
 });
 
 if (UI.skipBtn) {
-    UI.skipBtn.addEventListener('click', skipCurrentQuestion);
+    UI.skipBtn.addEventListener('click', (e) => {
+        if (AppState.kb1Retype) { if (e.detail > 0) skipRetype(); return; }
+        skipCurrentQuestion();
+    });
 }
 
 // Multiple-choice buttons (class questions): click, or press 1-4
@@ -2563,7 +2656,7 @@ if (UI.choiceBtnsContainer) {
     });
 }
 document.addEventListener('keydown', (e) => {
-    if (AppState.pendingNext && e.key === 'Enter' && e.target !== UI.answerInput && !UI.studySection.classList.contains('hidden')) {
+    if (AppState.pendingNext && (e.key === 'Enter' || e.key === ' ') && e.target !== UI.answerInput && !UI.studySection.classList.contains('hidden')) {
         e.preventDefault();
         evaluateAnswer('');
         return;
@@ -2648,7 +2741,7 @@ UI.revealBtn.addEventListener('click', () => {
     }
 
     if (AppState.currentCategory === 'kb1' && !isReadingQuestion(AppState.studyQueue[0])) {
-        if (AppState.isGrading || AppState.pendingNext || AppState.exam || AppState.studyQueue.length === 0) return;
+        if (AppState.isGrading || AppState.pendingNext || AppState.kb1Retype || AppState.exam || AppState.studyQueue.length === 0) return;
         AppState.isGrading = true;
         gradeClassQuestion(AppState.studyQueue[0], null);
         return;

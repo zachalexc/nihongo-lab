@@ -801,6 +801,8 @@ input[type="range"]::-moz-range-thumb {
     padding: 0.05em 0.45em; border-radius: 999px; vertical-align: middle;
     color: var(--text-secondary); border: 1px solid var(--border-color);
 }
+/* after a miss: Next → stays greyed out until something is typed */
+#submit-btn:disabled { background: var(--disabled-bg); color: var(--disabled-text); border-color: var(--border-color); cursor: not-allowed; box-shadow: none; transform: none; }
 /* Kanji readings feedback: one line per taught reading with class words */
 .kb1-yours { font-size: 0.95rem; color: var(--text-secondary); margin-bottom: 0.35rem; }
 .prompt-text .kb1-yours span[lang="ja"] { color: var(--text-primary); font-weight: 600; }

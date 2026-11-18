@@ -187,7 +187,7 @@
             kind, expected,
             allowNone: kind === 'kun',      // always offered for kun, so it gives nothing away
             promptText: kanjiPrompt(k, `Write the ${KIND_NAME[kind]} (${KIND_JA[kind]} · ${KIND_HINT[kind]})${how}` +
-                (kind === 'kun' ? okuri : '') + (kind === 'on' ? ' in hiragana' : '')),
+                (kind === 'kun' ? okuri + ' — Enter blank if none' : '') + (kind === 'on' ? ' in hiragana' : '')),
             correctAnswerKana: n ? expected.map(e => e.label).join('・') : 'なし',
             readText: n ? expected[0].forms[0] : '',
         });
@@ -567,7 +567,7 @@
             if (given === null) return okT(false, `<div class="kb1-answer">${mark(false)} ${escapeHtml(q.correctAnswerKana)}</div>${info}`);
             const tokens = given.replace(/[()（）]/g, m => m === '（' ? '(' : m === '）' ? ')' : m).split(KANA_SEP).filter(Boolean);
             if (!exp.length) {
-                const c = tokens.length > 0 && tokens.every(t => NONE_INPUTS.has(t.toLowerCase()));
+                const c = tokens.every(t => NONE_INPUTS.has(t.toLowerCase()));   // blank Enter = none
                 return okT(c, `<div class="kb1-answer">${mark(c)} No ${KIND_NAME[q.kind]} was taught for this kanji (なし)</div>${info}`);
             }
             if (tokens.some(t => NONE_INPUTS.has(t.toLowerCase()))) {
