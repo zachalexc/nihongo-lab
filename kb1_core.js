@@ -325,7 +325,8 @@
         const word = ([text, reading, , meaning, fromHandout, change]) =>
             `<span class="kb1-rw">${hl(text)}<span class="kb1-ex-r">（${escapeHtml(reading)}${meaning ? `, <span lang="en">${escapeHtml(meaning)}</span>` : ''}）</span>` +
             (change ? `<span class="kb1-rnote">${escapeHtml(change)}</span>` : '') +
-            (fromHandout === false ? '<span class="kb1-own-tag" lang="en">not on handouts</span>' : '') + '</span>';
+            (fromHandout === false ? '<span class="kb1-own-tag" lang="en">not on handouts</span>' : '') +
+            (fromHandout === 'dict' ? '<span class="kb1-own-tag" lang="en">dictionary</span>' : '') + '</span>';
         const row = (label, words) => `<div class="kb1-rrow"><span class="kb1-rlabel">${escapeHtml(label)}</span>` +
             `<span class="kb1-rwords">${words.length ? words.map(word).join('<span class="kb1-rsep"> · </span>')
                 : '<span class="kb1-rnone" lang="en">no class word uses this reading</span>'}</span></div>`;
