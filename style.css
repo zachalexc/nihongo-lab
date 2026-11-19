@@ -856,3 +856,51 @@ input[type="range"]::-moz-range-thumb {
 /* kun'yomi / on'yomi reminders */
 .prompt-text .kb1-feedback .kb1-kind, .kb1-kind { display: inline; font-size: 0.8em; color: var(--text-secondary); margin: 0; }
 .kb1-legend { font-size: 0.8rem; color: var(--text-secondary); margin: 0.25rem 0 0.5rem; line-height: 1.6; }
+
+/* 漢字基礎１: after a miss (word → reading, ※), each kanji of the word shows its readings on hover.
+   Mouse only: on touch screens the spans are there but nothing changes (tap support can come later). */
+.prompt-text .kb1-word .kb1-kh { display: inline; position: relative; margin: 0; font-size: inherit; font-weight: inherit; color: inherit; }
+.prompt-text .kb1-ktip, .kb1-hover-hint { display: none; }
+@media (hover: hover) and (pointer: fine) {
+    .prompt-text .kb1-word .kb1-kh {
+        display: inline-block; cursor: help;
+        border-bottom: 2px dotted rgba(92, 138, 255, 0.4); transition: border-color 0.2s;
+    }
+    .prompt-text .kb1-word .kb1-kh:hover { border-bottom-color: var(--accent-color); }
+    .prompt-text .kb1-ktip {
+        display: block; position: absolute; top: calc(100% + 10px); left: calc(50% + var(--kt-shift, 0px));
+        transform: translateX(-50%) translateY(-5px);
+        width: max-content; max-width: min(21rem, 86vw); margin: 0;
+        text-align: left; white-space: normal; line-height: 1.5;
+        font-size: 0.9rem; font-weight: 400; color: var(--text-primary);
+        background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px;
+        padding: 0.55rem 0.8rem; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        opacity: 0; visibility: hidden; pointer-events: none; z-index: 100;
+        transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
+    }
+    .prompt-text .kb1-ktip::before {        /* little arrow pointing up at the kanji */
+        content: ''; position: absolute; bottom: 100%; left: calc(50% - var(--kt-shift, 0px));
+        transform: translateX(-50%); border: 6px solid transparent; border-bottom-color: var(--border-color);
+    }
+    .prompt-text .kb1-word .kb1-kh:hover .kb1-ktip {
+        opacity: 1; visibility: visible; transform: translateX(-50%) translateY(0);
+    }
+    .prompt-text .kb1-ktip span { display: inline; margin: 0; font-size: inherit; font-weight: inherit; color: inherit; }
+    .prompt-text .kb1-ktip .kt-head, .prompt-text .kb1-ktip .kt-row, .prompt-text .kb1-ktip .kt-here { display: block; }
+    .prompt-text .kb1-ktip .kt-head { margin-bottom: 0.2rem; }
+    .prompt-text .kb1-ktip .kt-k { font-size: 1.7em; color: var(--accent-color); font-weight: 600; margin-right: 0.45em; vertical-align: middle; }
+    .prompt-text .kb1-ktip .kt-m { color: var(--text-secondary); vertical-align: middle; }
+    .prompt-text .kb1-ktip .kt-row { padding: 0.1rem 0; border-top: 1px solid var(--border-color); }
+    .prompt-text .kb1-ktip .kt-l { font-weight: 700; font-size: 0.85em; }
+    .prompt-text .kb1-ktip .kt-hint { font-weight: 400; color: var(--text-secondary); }
+    .prompt-text .kb1-ktip .kt-v { font-size: 1.1em; }
+    .prompt-text .kb1-ktip .kt-none { color: var(--text-secondary); font-style: italic; }
+    .prompt-text .kb1-ktip .kt-here {
+        margin-top: 0.3rem; padding: 0.2rem 0.45rem; border-radius: 4px;
+        background: rgba(92, 138, 255, 0.15); color: var(--text-primary);
+    }
+    .kb1-hover-hint { display: block; font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.5rem; }
+}
+/* 漢字基礎１ word prompts: furigana over kanji that aren't class kanji */
+.kb1-word ruby { ruby-align: center; }
+.kb1-word rt { font-size: 0.32em; color: var(--text-secondary); font-weight: 400; letter-spacing: 0; }

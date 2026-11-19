@@ -10,6 +10,7 @@ window.KB1 = (function () {
     let ctx = null;      // from app.js: decryptEncFile, flashElementColor, updateLiveEstimator, renderMasterList, isKnown, knownIds
     let data = null;     // { meta, vocabulary: [...data.json entries], sentences: [...sentence_data.json entries] }
     let byId = new Map();
+    let kanjiMap = null;  // kanji entries by character (for the after-a-miss kanji hover)
 
     const $ = id => document.getElementById(id);
 
@@ -45,6 +46,7 @@ window.KB1 = (function () {
             }
             data = bundle;
             byId = new Map(data.vocabulary.map(w => [w.id, w]));
+            kanjiMap = null;
             renderInfo();
             renderLearnedList();
             $('kb1-lock-view').classList.add('hidden');
@@ -116,6 +118,10 @@ window.KB1 = (function () {
 
     function isUnlocked() { return !!data; }
     function findWord(id) { return byId.get(id) || null; }
+    function kanjiByChar() {
+        if (!kanjiMap && data) kanjiMap = new Map(data.vocabulary.filter(w => w.type === 'kanji').map(k => [k.base.kanji, k]));
+        return kanjiMap || new Map();
+    }
 
     function estimateHtml() {
         if (!data) return 'Estimated Flashcards: <span>Locked</span>';
@@ -135,5 +141,5 @@ window.KB1 = (function () {
                  kanjiAll: data.vocabulary.filter(w => w.type === 'kanji'), opts };
     }
 
-    return { init, isUnlocked, findWord, estimateHtml, source, mode, options };
+    return { init, isUnlocked, findWord, kanjiByChar, estimateHtml, source, mode, options };
 })();

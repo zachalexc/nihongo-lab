@@ -64,8 +64,31 @@
     }
 
     // ---- class-only questions (they read the same data.json-format entries) ----------
-    function wordPrompt(w, instruction) {
-        return `<div class="kb1-word" lang="ja">${escapeHtml(w.base.kanji)}</div>` +
+    // Furigana over kanji that aren't class kanji (classKanji = every kanji entry, all Steps), so words with
+    // outside kanji can still be read. Class kanji never get it, and neither do ※ parts (it would give the
+    // whole-word reading away). 々 follows the kanji it repeats. classKanji null = no furigana.
+    const isKanjiChar = c => /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff々]/.test(c);
+    function furiganaFor(c, reading, type, prev, classKanji) {
+        if (!classKanji || (type !== 'on' && type !== 'kun') || !isKanjiChar(c)) return '';
+        return classKanji.has(c === '々' ? prev : c) ? '' : reading;
+    }
+    function rubyChar(c, rt) {
+        return rt ? `<ruby>${escapeHtml(c)}<rt>${escapeHtml(rt)}</rt></ruby>` : escapeHtml(c);
+    }
+    function wordRubyHtml(w, classKanji) {
+        const parts = classKanji && w.kb1 && w.kb1.split && w.kb1.split.length ? w.kb1.split : null;
+        if (!parts) return escapeHtml(w.base.kanji);
+        let out = '', prev = '';
+        for (const [text, reading, type] of parts) {
+            const chars = Array.from(text);
+            out += chars.length === 1 ? rubyChar(text, furiganaFor(text, reading, type, prev, classKanji)) : escapeHtml(text);
+            for (const c of chars) if (isKanjiChar(c) && c !== '々') prev = c;
+        }
+        return out;
+    }
+
+    function wordPrompt(w, instruction, classKanji) {
+        return `<div class="kb1-word" lang="ja">${wordRubyHtml(w, classKanji)}</div>` +
                `<div class="kb1-instruction">${instruction}</div>`;
     }
 
@@ -81,11 +104,11 @@
         };
     }
 
-    function readingTyped(w) {
+    function readingTyped(w, classKanji) {
         return Object.assign(base(w, 'reading-typed'), {
             promptText: wordPrompt(w, hasKatakana(w.base.kana)
                 ? 'Type the reading — hiragana, with katakana parts in katakana (Caps Lock)'
-                : 'Type the reading in hiragana'),
+                : 'Type the reading in hiragana', classKanji),
             acceptAnswers: [],            // katakana must be typed as katakana: no folding
         });
     }
@@ -95,9 +118,9 @@
         return shuffle([correct, ...wrong], rng);
     }
 
-    function readingChoice(w, rng) {
+    function readingChoice(w, rng, classKanji) {
         return Object.assign(base(w, 'reading-mc'), {
-            promptText: wordPrompt(w, 'Choose the reading'),
+            promptText: wordPrompt(w, 'Choose the reading', classKanji),
             choices: pickChoices(w.base.kana, w.kb1.d_reading, rng),
             choicesLang: 'ja',
             correctAnswer: w.base.kana,
@@ -393,6 +416,53 @@
         return q;
     }
 
+    // ---- after a miss: each kanji of the word shows its readings on hover ---------------
+    // app.js swaps the word for this only after a wrong answer (word → reading, ※ special).
+    // Each kanji: its meaning, taught kun'yomi then on'yomi (same labels as Kanji readings), and how
+    // it is read in this word (from kb1.split). Kanji outside the class get only the in-word line;
+    // 々 shows the kanji it repeats; ※ parts say the reading belongs to the whole word.
+    function kanjiTipHtml(c, k, here, repeats) {
+        const row = (kind, head, hint) => {
+            const labels = taught(k, kind).map(e => e.label).join('・') || 'なし';
+            return `<span class="kt-row"><span class="kt-l">${head} <span class="kt-hint">(${hint})</span></span> ` +
+                `<span class="kt-v" lang="ja">${escapeHtml(labels)}</span></span>`;
+        };
+        const head = `<span class="kt-head"><span class="kt-k" lang="ja">${escapeHtml(c)}</span>` +
+            (repeats ? `<span class="kt-m">repeats <span lang="ja">${escapeHtml(repeats)}</span>${k ? ' · ' + escapeHtml(k.meaning) : ''}</span>`
+                : k ? `<span class="kt-m">${escapeHtml(k.meaning)}</span>` : '') + '</span>';
+        const sp = k && (k.kb1.special_readings || []).length
+            ? `<span class="kt-row"><span class="kt-l">※ special</span> <span class="kt-v" lang="ja">${escapeHtml(k.kb1.special_readings.map(x => `${x.reading}（${x.words.join('、')}）`).join('・'))}</span></span>` : '';
+        const body = k ? row('kun', "訓 kun'yomi", 'Japanese reading') + row('on', "音 on'yomi", 'Chinese reading') + sp
+            : `<span class="kt-row kt-none">Not a class kanji — no class readings</span>`;
+        return `<span class="kb1-ktip" lang="en">${head}${body}<span class="kt-here">${here}</span></span>`;
+    }
+
+    function wordHoverHtml(w, kanjiByChar) {
+        const parts = (w.kb1 && w.kb1.split && w.kb1.split.length) ? w.kb1.split : [[w.base.kanji, w.base.kana, 'special']];
+        const ja = t => `<span lang="ja">${escapeHtml(t)}</span>`;
+        let out = '', prev = '';
+        for (const [text, reading, type] of parts) {
+            const chars = Array.from(text);
+            if (type === 'kana' || !chars.some(isKanjiChar)) { out += escapeHtml(text); continue; }
+            for (const c of chars) {
+                if (!isKanjiChar(c)) { out += escapeHtml(c); continue; }
+                const repeats = c === '々' ? prev : '';
+                const k = kanjiByChar.get(repeats || c) || null;
+                let here;
+                if (type === 'special' && chars.length > 1)
+                    here = `In this word: part of ※ ${ja(text)} = ${ja(reading)}, a special reading of the whole word`;
+                else if (type === 'special')
+                    here = `In this word: ${ja(c)} = ${ja(reading)}, ※ a special reading`;
+                else
+                    here = `In this word: ${ja(c)} = ${ja(reading)} (${KIND_NAME[type] || type})`;
+                const rt = chars.length === 1 ? furiganaFor(c, reading, type, prev, kanjiByChar) : '';   // same furigana as the prompt
+                out += `<span class="kb1-kh">${rubyChar(c, rt)}${kanjiTipHtml(c, k, here, repeats)}</span>`;
+                if (c !== '々') prev = c;
+            }
+        }
+        return out;
+    }
+
     // ---- ※ special readings (熟字訓 and irregular words) ---------------------------------
     function specialWords(data, opts) {
         const steps = new Set(opts.steps);
@@ -400,10 +470,10 @@
             w.kb1.steps.some(s => steps.has(s)) && !(opts.exclude && opts.exclude.has(w.id)));
     }
 
-    function specialQuestion(w, mc, rng) {
+    function specialQuestion(w, mc, rng, classKanji) {
         const extraTag = w.kb1.in_class ? '' : ' <span class="kb1-extra-tag">extra</span>';
         if (!mc) {
-            const q = readingTyped(w);
+            const q = readingTyped(w, classKanji);
             q.qtype = 'special-typed';
             q.promptText = q.promptText.replace('</div><div class="kb1-instruction">', `${extraTag}</div><div class="kb1-instruction">※ special reading — `);
             return q;
@@ -412,7 +482,7 @@
         const others = (w.kb1.d_reading || []).filter(x => x !== w.base.kana && !regular.includes(x));
         const wrong = [...shuffle(regular, rng).slice(0, 2), ...shuffle(others, rng)].slice(0, 3);
         return Object.assign(base(w, 'special-mc'), {
-            promptText: wordPrompt(w, '※ special reading — choose the reading').replace('</div><div', `${extraTag}</div><div`),
+            promptText: wordPrompt(w, '※ special reading — choose the reading', classKanji).replace('</div><div', `${extraTag}</div><div`),
             choices: shuffle([w.base.kana, ...wrong], rng), choicesLang: 'ja', correctAnswer: w.base.kana,
         });
     }
@@ -470,14 +540,14 @@
                         : t === 'which' ? it.word.id : it.id;
                     if (usedWords.has(key)) continue;
                     usedWords.add(key);
-                    if (t === 'w-typed') q = readingTyped(it);
-                    else if (t === 'w-mc') q = readingChoice(it, rng);
+                    if (t === 'w-typed') q = readingTyped(it, kanjiByChar);
+                    else if (t === 'w-mc') q = readingChoice(it, rng, kanjiByChar);
                     else if (t === 'w-meaning') q = meaningChoice(it, rng);
                     else if (t === 'k-typed') q = kanjiTyped(it[0], it[1], !!opts.requireOkurigana);
                     else if (t === 'k-mc') q = kanjiChoice(it[0], it[1], src.kanji, rng);
                     else if (t === 'k-onkun') q = kanjiOnOrKun(it, rng);
                     else if (t === 'which') q = whichQuestion(it, kanjiByChar, rng() < 0.5, rng);
-                    else if (t === 'special') q = specialQuestion(it, rng() < 0.5, rng);
+                    else if (t === 'special') q = specialQuestion(it, rng() < 0.5, rng, kanjiByChar);
                 }
                 if (q) { q.examType = t; q.examStep = st; out.push(q); }
             }
@@ -590,16 +660,17 @@
     // src: { words, kanji } from selectWords()/selectKanji(); opts.kanjiTypes for the kanji mode.
     function buildQueue(src, mode, opts = {}, rng = Math.random) {
         const words = src.words || [];
-        if (mode === 'kb1-reading-typed') return words.map(readingTyped);
-        if (mode === 'kb1-reading-mc') return words.map(w => readingChoice(w, rng));
+        const classKanji = src.kanjiAll ? new Map(src.kanjiAll.map(k => [k.base.kanji, k])) : null;   // for furigana
+        if (mode === 'kb1-reading-typed') return words.map(w => readingTyped(w, classKanji));
+        if (mode === 'kb1-reading-mc') return words.map(w => readingChoice(w, rng, classKanji));
         if (mode === 'kb1-meaning-mc') return words.map(w => meaningChoice(w, rng));
         if (mode === 'kb1-kanji') return kanjiQuestions(src.kanji || [], opts.kanjiTypes || KANJI_TYPES, rng, !!opts.requireOkurigana);
         if (mode === 'kb1-which-typed' || mode === 'kb1-which-mc') {
             const byChar = new Map((src.kanjiAll || []).map(k => [k.base.kanji, k]));
             return whichItems(words, byChar).map(it => whichQuestion(it, byChar, mode === 'kb1-which-mc', rng));
         }
-        if (mode === 'kb1-special-typed') return (src.special || []).map(w => specialQuestion(w, false, rng));
-        if (mode === 'kb1-special-mc') return (src.special || []).map(w => specialQuestion(w, true, rng));
+        if (mode === 'kb1-special-typed') return (src.special || []).map(w => specialQuestion(w, false, rng, classKanji));
+        if (mode === 'kb1-special-mc') return (src.special || []).map(w => specialQuestion(w, true, rng, classKanji));
         if (mode === 'kb1-exam') return buildExam(src, opts, rng);
         return [];
     }
@@ -623,6 +694,6 @@
     return { NEW_MODES, SENTENCE_MODES, KANJI_TYPES, NONE_LABEL, shuffle, escapeHtml, hasKatakana,
              selectWords, selectSentences, selectKanji, readingTyped, readingChoice, meaningChoice,
              kanjiTyped, kanjiChoice, kanjiOnOrKun, kanjiQuestions, kanjiInfoHtml, kanjiReadingsHtml, taught,
-             whichItems, whichQuestion, specialWords, specialQuestion, EXAM_TYPES, buildExam, examResultsHtml,
+             whichItems, whichQuestion, wordHoverHtml, wordRubyHtml, specialWords, specialQuestion, EXAM_TYPES, buildExam, examResultsHtml,
              grade, buildQueue, estimate, checkTyped };
 });

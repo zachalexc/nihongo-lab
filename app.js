@@ -1365,6 +1365,7 @@ function gradeClassQuestion(question, submittedAnswer) {
         if (!result.correct && submittedAnswer != null) markChoice(submittedAnswer, 'choice-wrong');
     }
     UI.promptText.innerHTML += `<div class="kb1-feedback">${result.html}</div>`;
+    if (!result.correct) addKanjiHover(question);
     // Kanji readings: the typed answer is repeated in the feedback, so the box can go until the next card
     if (question.qtype && question.qtype.startsWith('kanji-') && !question.choices) UI.answerInput.classList.add('hidden');
     if (!result.correct && question.readText && UI.audioToggleCheckbox.checked) speakJapanese(question.readText);
@@ -1385,6 +1386,40 @@ function gradeClassQuestion(question, submittedAnswer) {
         loadNextQuestion();
     });
 }
+
+// After a miss in word → reading (and ※ special): each kanji of the word shows its readings on hover
+// (PC; the CSS only shows it for a mouse). The next card re-renders the prompt, so it goes away by itself.
+const KANJI_HOVER_QTYPES = new Set(['reading-typed', 'reading-mc', 'special-typed', 'special-mc']);
+function addKanjiHover(question) {
+    if (!KANJI_HOVER_QTYPES.has(question.qtype) || !window.KB1 || !KB1.kanjiByChar) return;
+    const w = findWordById(question.wordId);
+    const el = UI.promptText.querySelector('.kb1-word');
+    if (!w || !w.kb1 || !el) return;
+    const tag = el.querySelector('.kb1-extra-tag');          // ※ mode: keep the "extra" label
+    el.innerHTML = KB1Core.wordHoverHtml(w, KB1.kanjiByChar()) + (tag ? ' ' + tag.outerHTML : '');
+    el.classList.add('kb1-word-hover');
+    const fb = UI.promptText.querySelector('.kb1-feedback');
+    if (fb) fb.insertAdjacentHTML('beforeend', '<div class="kb1-hover-hint">Hover a kanji to see its readings</div>');
+}
+
+// Keep a kanji hover card inside the study card: shift it sideways if it would stick out
+// (the arrow stays on the kanji).
+document.addEventListener('mouseover', (e) => {
+    const kh = e.target.closest && e.target.closest('.kb1-kh');
+    if (!kh || (e.relatedTarget && kh.contains(e.relatedTarget))) return;
+    const tip = kh.querySelector('.kb1-ktip'), card = kh.closest('.study-card');
+    if (!tip || !card) return;
+    tip.style.setProperty('--kt-shift', '0px');
+    const t = tip.getBoundingClientRect(), c = card.getBoundingClientRect(), pad = 8;
+    let shift = 0;
+    if (t.left < c.left + pad) shift = c.left + pad - t.left;
+    else if (t.right > c.right - pad) shift = c.right - pad - t.right;
+    tip.style.setProperty('--kt-shift', `${Math.round(shift)}px`);
+});
+// Clicking a kanji keeps the cursor in the answer box (so Enter still goes to the retype)
+document.addEventListener('mousedown', (e) => {
+    if (e.target.closest && e.target.closest('.kb1-kh')) e.preventDefault();
+});
 
 function retypeAfterMiss(question) {
     const box = document.getElementById('kb1-retype');
