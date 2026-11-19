@@ -2053,6 +2053,11 @@ function finishSession() {
     UI.revealBtn.textContent = 'Back to Settings';
     
     UI.revealBtn.onclick = resetToSettings;
+    // 漢字基礎１: Skip does nothing here, and Reveal was hidden during the session -- show Back to Settings instead
+    if (AppState.currentCategory === 'kb1') {
+        UI.skipBtn.classList.add('hidden');
+        UI.revealBtn.classList.remove('hidden');
+    }
 }
 
 function retakeSession() {
