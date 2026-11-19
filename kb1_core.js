@@ -120,34 +120,22 @@
     const toHira = s => String(s).replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
     const stripParens = s => s.replace(/[()（）]/g, '');
 
-    // Kun'yomi that start the same are either forms of one word, or different words.
-    //  - One word: はな(す)・はな(し) (verb + its noun), ちか(い)・ちか(く) (adjective + く form),
-    //    なな(つ)・なな → ONE answer slot, labelled はな(す・し); the stem or any full form is right.
-    //  - Different words: お(きる)・お(こす), はじ(まる)・はじ(める), たの(しい)・たの(しむ)
-    //    → separate slots; each needs its okurigana, since the stem alone can't tell them apart.
-    const I_ROW = { う: 'い', く: 'き', ぐ: 'ぎ', す: 'し', つ: 'ち', ぬ: 'に', ぶ: 'び', む: 'み', る: 'り' };
-    function sameWord(a, b) {
-        const x = a.okurigana, y = b.okurigana;
-        if (!x || !y) return true;                                                       // なな / なな(つ)
-        if (x.slice(0, -1) === y.slice(0, -1) && I_ROW[x.slice(-1)] === y.slice(-1)) return true;   // 休む → 休み
-        if (x.endsWith('い') && y === x.slice(0, -1) + 'く') return true;               // 近い → 近く
-        return false;
-    }
-
-    // [{label, forms, members, idx, needsOkurigana}] — idx = positions in kb1.kun_readings
+    // Kun'yomi that start the same (はな(す)・はな(し), お(きる)・お(こす)) are ONE answer, labelled
+    // はな(す・し) / お(きる・こす): the kanji's reading is the part before the parenthesis, so the
+    // start alone or any full form is right. ("Require okurigana" asks for every full form instead.)
+    // [{label, forms, members, idx}] — idx = positions in kb1.kun_readings
     function kunGroups(k) {
         const groups = [];
         k.kb1.kun_readings.forEach((r, i) => {
-            const g = groups.find(g => g.stem === r.stem && g.items.some(x => sameWord(x, r) || sameWord(r, x)));
+            const g = groups.find(g => g.stem === r.stem);
             if (g) { g.items.push(r); g.idx.push(i); } else groups.push({ stem: r.stem, items: [r], idx: [i] });
         });
         return groups.map(g => {
-            const shared = groups.some(o => o !== g && o.stem === g.stem);
             const oks = [...new Set(g.items.map(r => r.okurigana).filter(Boolean))];
             return {
                 label: g.items.length === 1 ? g.items[0].text : (oks.length ? `${g.stem}(${oks.join('・')})` : g.stem),
-                forms: [...new Set([...g.items.map(r => r.kana), ...(shared ? [] : [g.stem]), ...g.items.flatMap(r => r.variants)])],
-                members: g.items.map(r => r.text), idx: g.idx, needsOkurigana: shared,
+                forms: [...new Set([g.stem, ...g.items.map(r => r.kana), ...g.items.flatMap(r => r.variants)])],
+                members: g.items.map(r => r.text), idx: g.idx,
             };
         });
     }
@@ -178,11 +166,16 @@
         };
     }
 
-    function kanjiTyped(k, kind) {
-        const expected = taught(k, kind);
+    // requireOkurigana (class setting): every kun'yomi is typed as its full word, one answer per handout
+    // reading -- so お(きる)・お(こす) needs おきる おこす. Off: one answer per start, ending optional.
+    function kanjiTyped(k, kind, requireOkurigana = false) {
+        const strict = kind === 'kun' && requireOkurigana;
+        const expected = strict
+            ? k.kb1.kun_readings.map(r => ({ label: r.text, forms: [r.kana, ...r.variants], members: [r.text] }))
+            : taught(k, kind);
         const n = expected.length;
         const how = n > 1 ? ` — ${n} ${KIND_NAME[kind]}, separated by a space or ・` : '';
-        const okuri = expected.some(e => e.needsOkurigana) ? ' — include okurigana' : ' — okurigana optional';
+        const okuri = strict ? ' — include okurigana' : ' — okurigana optional';
         return Object.assign(kanjiBase(k, `kanji-${kind}-typed`), {
             kind, expected,
             allowNone: kind === 'kun',      // always offered for kun, so it gives nothing away
@@ -262,12 +255,12 @@
 
     const KANJI_TYPES = ['kun-typed', 'on-typed', 'kun-mc', 'on-mc', 'onkun'];
 
-    function kanjiQuestions(kanjiList, types, rng = Math.random) {
+    function kanjiQuestions(kanjiList, types, rng = Math.random, requireOkurigana = false) {
         const out = [];
         for (const k of kanjiList) {
             for (const t of types) {
                 if (t === 'on-typed') out.push(kanjiTyped(k, 'on'));
-                if (t === 'kun-typed') out.push(kanjiTyped(k, 'kun'));
+                if (t === 'kun-typed') out.push(kanjiTyped(k, 'kun', requireOkurigana));
                 if (t === 'on-mc') out.push(kanjiChoice(k, 'on', kanjiList, rng));
                 if (t === 'kun-mc') out.push(kanjiChoice(k, 'kun', kanjiList, rng));
                 if (t === 'onkun') out.push(kanjiOnOrKun(k, rng));
@@ -290,29 +283,14 @@
             `<span class="kb1-meaning"> · ${escapeHtml(k.meaning)}</span></div>`;
     }
 
-    // Example words for one kun slot. Merged slot: the words of all its handout readings, once each
-    // (one per reading first), up to 3. Slots sharing a stem with another slot (お(きる) / お(こす)):
-    // only words whose okurigana fits this slot best (起きる here, 起こす there).
+    // Example words for one kun answer: the words of all its handout readings, once each
+    // (one per reading first), up to 3 -- e.g. お(きる・こす): 起きる · 起こす.
     function kunRowWords(k, groups, e, rxKun) {
         const lists = e.idx.map(i => rxKun[i] || []);
         const out = [], seen = new Set();
         for (let j = 0; out.length < 3 && lists.some(l => j < l.length); j++)
             for (const l of lists) if (j < l.length && out.length < 3 && !seen.has(l[j][0] + '|' + l[j][1])) { seen.add(l[j][0] + '|' + l[j][1]); out.push(l[j]); }
-        if (!e.needsOkurigana) return out;
-        const ch = k.base.kanji, rs = k.kb1.kun_readings;
-        const stem = rs[e.idx[0]].stem;
-        const rivals = groups.filter(g => g.needsOkurigana && rs[g.idx[0]].stem === stem);
-        const fit = (g, after) => Math.max(...g.idx.flatMap(i => {
-            const o = rs[i].okurigana, alt = o.slice(0, -1) + (I_ROW[o.slice(-1)] || o.slice(-1));
-            return [o, alt].map(f => { let n = 0; while (n < f.length && after[n] === f[n]) n++; return n; });
-        }));
-        return out.filter(([text]) => {
-            const at = text.indexOf(ch);
-            if (at < 0) return true;
-            const after = text.slice(at + 1);
-            const best = Math.max(...rivals.map(g => fit(g, after)));
-            return fit(e, after) === best;
-        });
+        return out;
     }
 
     // Kanji readings mode: every taught reading on its own line with class words that use it
@@ -495,7 +473,7 @@
                     if (t === 'w-typed') q = readingTyped(it);
                     else if (t === 'w-mc') q = readingChoice(it, rng);
                     else if (t === 'w-meaning') q = meaningChoice(it, rng);
-                    else if (t === 'k-typed') q = kanjiTyped(it[0], it[1]);
+                    else if (t === 'k-typed') q = kanjiTyped(it[0], it[1], !!opts.requireOkurigana);
                     else if (t === 'k-mc') q = kanjiChoice(it[0], it[1], src.kanji, rng);
                     else if (t === 'k-onkun') q = kanjiOnOrKun(it, rng);
                     else if (t === 'which') q = whichQuestion(it, kanjiByChar, rng() < 0.5, rng);
@@ -615,7 +593,7 @@
         if (mode === 'kb1-reading-typed') return words.map(readingTyped);
         if (mode === 'kb1-reading-mc') return words.map(w => readingChoice(w, rng));
         if (mode === 'kb1-meaning-mc') return words.map(w => meaningChoice(w, rng));
-        if (mode === 'kb1-kanji') return kanjiQuestions(src.kanji || [], opts.kanjiTypes || KANJI_TYPES, rng);
+        if (mode === 'kb1-kanji') return kanjiQuestions(src.kanji || [], opts.kanjiTypes || KANJI_TYPES, rng, !!opts.requireOkurigana);
         if (mode === 'kb1-which-typed' || mode === 'kb1-which-mc') {
             const byChar = new Map((src.kanjiAll || []).map(k => [k.base.kanji, k]));
             return whichItems(words, byChar).map(it => whichQuestion(it, byChar, mode === 'kb1-which-mc', rng));

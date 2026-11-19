@@ -101,6 +101,7 @@ window.KB1 = (function () {
         return {
             steps,
             includeExtra: !!($('kb1-include-extra') && $('kb1-include-extra').checked),
+            requireOkurigana: !!($('kb1-okurigana') && $('kb1-okurigana').checked),
             exclude: new Set(ctx.knownIds()),
             kanjiTypes,
             examTypes,
