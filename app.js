@@ -1396,7 +1396,8 @@ function addKanjiHover(question) {
     const el = UI.promptText.querySelector('.kb1-word');
     if (!w || !w.kb1 || !el) return;
     const tag = el.querySelector('.kb1-extra-tag');          // ※ mode: keep the "extra" label
-    el.innerHTML = KB1Core.wordHoverHtml(w, KB1.kanjiByChar()) + (tag ? ' ' + tag.outerHTML : '');
+    const furigana = !!el.querySelector('ruby');              // keep the prompt's furigana (setting on), or none
+    el.innerHTML = KB1Core.wordHoverHtml(w, KB1.kanjiByChar(), furigana) + (tag ? ' ' + tag.outerHTML : '');
     el.classList.add('kb1-word-hover');
     const fb = UI.promptText.querySelector('.kb1-feedback');
     if (fb) fb.insertAdjacentHTML('beforeend', '<div class="kb1-hover-hint">Hover a kanji to see its readings</div>');

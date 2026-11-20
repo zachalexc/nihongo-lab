@@ -66,7 +66,8 @@
     // ---- class-only questions (they read the same data.json-format entries) ----------
     // Furigana over kanji that aren't class kanji (classKanji = every kanji entry, all Steps), so words with
     // outside kanji can still be read. Class kanji never get it, and neither do ※ parts (it would give the
-    // whole-word reading away). 々 follows the kanji it repeats. classKanji null = no furigana.
+    // whole-word reading away). 々 follows the kanji it repeats. classKanji null = no furigana
+    // (the "Furigana over kanji that aren't class kanji" setting off: opts.furigana === false).
     const isKanjiChar = c => /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff々]/.test(c);
     function furiganaFor(c, reading, type, prev, classKanji) {
         if (!classKanji || (type !== 'on' && type !== 'kun') || !isKanjiChar(c)) return '';
@@ -437,7 +438,7 @@
         return `<span class="kb1-ktip" lang="en">${head}${body}<span class="kt-here">${here}</span></span>`;
     }
 
-    function wordHoverHtml(w, kanjiByChar) {
+    function wordHoverHtml(w, kanjiByChar, furigana = true) {
         const parts = (w.kb1 && w.kb1.split && w.kb1.split.length) ? w.kb1.split : [[w.base.kanji, w.base.kana, 'special']];
         const ja = t => `<span lang="ja">${escapeHtml(t)}</span>`;
         let out = '', prev = '';
@@ -455,7 +456,7 @@
                     here = `In this word: ${ja(c)} = ${ja(reading)}, ※ a special reading`;
                 else
                     here = `In this word: ${ja(c)} = ${ja(reading)} (${KIND_NAME[type] || type})`;
-                const rt = chars.length === 1 ? furiganaFor(c, reading, type, prev, kanjiByChar) : '';   // same furigana as the prompt
+                const rt = furigana && chars.length === 1 ? furiganaFor(c, reading, type, prev, kanjiByChar) : '';   // same furigana as the prompt
                 out += `<span class="kb1-kh">${rubyChar(c, rt)}${kanjiTipHtml(c, k, here, repeats)}</span>`;
                 if (c !== '々') prev = c;
             }
@@ -505,6 +506,7 @@
         const count = Math.max(1, opts.examCount || 50);
         const types = (opts.examTypes && opts.examTypes.length) ? opts.examTypes : Object.keys(EXAM_TYPES);
         const kanjiByChar = new Map((src.kanjiAll || []).map(k => [k.base.kanji, k]));
+        const furiKanji = opts.furigana === false ? null : kanjiByChar;
         const stepOf = x => x.kb1.steps[0];
         const share = {};
         for (const w of src.words) if (w.kb1.in_class) share[stepOf(w)] = (share[stepOf(w)] || 0) + 1;
@@ -540,14 +542,14 @@
                         : t === 'which' ? it.word.id : it.id;
                     if (usedWords.has(key)) continue;
                     usedWords.add(key);
-                    if (t === 'w-typed') q = readingTyped(it, kanjiByChar);
-                    else if (t === 'w-mc') q = readingChoice(it, rng, kanjiByChar);
+                    if (t === 'w-typed') q = readingTyped(it, furiKanji);
+                    else if (t === 'w-mc') q = readingChoice(it, rng, furiKanji);
                     else if (t === 'w-meaning') q = meaningChoice(it, rng);
                     else if (t === 'k-typed') q = kanjiTyped(it[0], it[1], !!opts.requireOkurigana);
                     else if (t === 'k-mc') q = kanjiChoice(it[0], it[1], src.kanji, rng);
                     else if (t === 'k-onkun') q = kanjiOnOrKun(it, rng);
                     else if (t === 'which') q = whichQuestion(it, kanjiByChar, rng() < 0.5, rng);
-                    else if (t === 'special') q = specialQuestion(it, rng() < 0.5, rng, kanjiByChar);
+                    else if (t === 'special') q = specialQuestion(it, rng() < 0.5, rng, furiKanji);
                 }
                 if (q) { q.examType = t; q.examStep = st; out.push(q); }
             }
@@ -660,7 +662,7 @@
     // src: { words, kanji } from selectWords()/selectKanji(); opts.kanjiTypes for the kanji mode.
     function buildQueue(src, mode, opts = {}, rng = Math.random) {
         const words = src.words || [];
-        const classKanji = src.kanjiAll ? new Map(src.kanjiAll.map(k => [k.base.kanji, k])) : null;   // for furigana
+        const classKanji = src.kanjiAll && opts.furigana !== false ? new Map(src.kanjiAll.map(k => [k.base.kanji, k])) : null;   // for furigana
         if (mode === 'kb1-reading-typed') return words.map(w => readingTyped(w, classKanji));
         if (mode === 'kb1-reading-mc') return words.map(w => readingChoice(w, rng, classKanji));
         if (mode === 'kb1-meaning-mc') return words.map(w => meaningChoice(w, rng));

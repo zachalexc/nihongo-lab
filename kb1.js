@@ -104,6 +104,7 @@ window.KB1 = (function () {
             steps,
             includeExtra: !!($('kb1-include-extra') && $('kb1-include-extra').checked),
             requireOkurigana: !!($('kb1-okurigana') && $('kb1-okurigana').checked),
+            furigana: !$('kb1-furigana') || $('kb1-furigana').checked,     // over kanji that aren't class kanji
             exclude: new Set(ctx.knownIds()),
             kanjiTypes,
             examTypes,
