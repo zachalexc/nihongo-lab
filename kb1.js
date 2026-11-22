@@ -1,4 +1,4 @@
-// Kanji Basic 1 (漢字基礎１) tab: unlocking, settings and the class data source.
+// Kanji Basic 1 + 2 (漢字基礎, Steps 1–12) tab: unlocking, settings and the class data source.
 // The class data is in the app's own formats (data.json words, sentence_data.json sentences)
 // with an optional `kb1` field on each entry. app.js builds sessions from it with the same
 // builders the other tabs use; kb1_core.js adds the class-only question types.
@@ -10,7 +10,7 @@ window.KB1 = (function () {
     let ctx = null;      // from app.js: decryptEncFile, flashElementColor, updateLiveEstimator, renderMasterList, isKnown, knownIds
     let data = null;     // { meta, vocabulary: [...data.json entries], sentences: [...sentence_data.json entries] }
     let byId = new Map();
-    let kanjiMap = null;  // kanji entries by character (for the after-a-miss kanji hover)
+    let kanjiMap = null;  // kanji entries (for the after-a-miss kanji hover)
 
     const $ = id => document.getElementById(id);
 
@@ -77,9 +77,11 @@ window.KB1 = (function () {
         const provisional = [...new Set(data.vocabulary
             .filter(w => w.type === 'kanji' && w.kb1.confidence === 'low')
             .map(w => w.kb1.steps[0]))].sort();
+        const gen = data.meta.generated_steps || [];
         if (el) el.textContent =
             `${c.class_words} handout words · ${c.kanji} kanji · ${c.sentences} sentences · data ${data.meta.export_generated}` +
-            (provisional.length ? ` · Step ${provisional.join(', ')} answers provisional` : '');
+            (provisional.length ? ` · Step ${provisional.join(', ')} answers provisional` : '') +
+            (gen.length ? ` · Steps ${gen[0]}–${gen[gen.length - 1]}: ${c.kb2_words} words generated from dictionaries, not from handouts` : '');
     }
 
     // The app's own "learned" list (check to exclude), for the class words.
@@ -89,7 +91,7 @@ window.KB1 = (function () {
         const words = data.vocabulary.filter(w => w.type !== 'kanji')
             .sort((a, b) => (a.kb1.steps[0] - b.kb1.steps[0]) || (b.kb1.in_class - a.kb1.in_class));
         ctx.renderMasterList(container, words, 'class words',
-            w => `${w.base.kanji}（${w.base.kana}） ${w.meaning}${w.kb1.in_class ? '' : ' · extra'}`);
+            w => `${w.base.kanji}（${w.base.kana}） ${w.meaning}${w.kb1.generated ? ' · generated' : w.kb1.in_class ? '' : ' · extra'}`);
     }
 
     function options() {
@@ -119,9 +121,11 @@ window.KB1 = (function () {
 
     function isUnlocked() { return !!data; }
     function findWord(id) { return byId.get(id) || null; }
+    // Kanji for the after-a-miss hover cards: the class kanji for the selected Steps (Basic 1 + Basic 2 up to
+    // the highest selected Step), the same list as the prompt's furigana. Others say "Not a class kanji".
     function kanjiByChar() {
-        if (!kanjiMap && data) kanjiMap = new Map(data.vocabulary.filter(w => w.type === 'kanji').map(k => [k.base.kanji, k]));
-        return kanjiMap || new Map();
+        if (!kanjiMap && data) kanjiMap = data.vocabulary.filter(w => w.type === 'kanji');
+        return kanjiMap ? KB1Core.classKanji(kanjiMap, options().steps) : new Map();
     }
 
     function estimateHtml() {
@@ -137,6 +141,10 @@ window.KB1 = (function () {
         if (!opts.steps.length) { alert('Please choose at least one Step.'); return null; }
         if (mode() === 'kb1-kanji' && !opts.kanjiTypes.length) { alert('Please choose at least one question type.'); return null; }
         if (mode() === 'kb1-exam' && !opts.examTypes.length) { alert('Please choose at least one question type.'); return null; }
+        const gen = new Set(data.meta.generated_steps || []);
+        if (KB1Core.SENTENCE_MODES.includes(mode()) && opts.steps.every(st => gen.has(st)) && !KB1Core.selectSentences(data, opts).length) {
+            alert('No sentences for Steps 7–12 yet.'); return null;
+        }
         return { words: KB1Core.selectWords(data, opts), sentences: KB1Core.selectSentences(data, opts),
                  kanji: KB1Core.selectKanji(data, opts), special: KB1Core.specialWords(data, opts),
                  kanjiAll: data.vocabulary.filter(w => w.type === 'kanji'), opts };
