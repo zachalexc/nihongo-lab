@@ -69,6 +69,8 @@ window.KB1 = (function () {
         if (box) box.classList.toggle('hidden', mode() !== 'kb1-kanji');
         const exam = $('kb1-exam-options');
         if (exam) exam.classList.toggle('hidden', mode() !== 'kb1-exam');
+        const endless = $('kb1-endless-options');
+        if (endless) endless.classList.toggle('hidden', mode() !== 'kb1-endless');
     }
 
     function renderInfo() {
@@ -130,6 +132,9 @@ window.KB1 = (function () {
 
     function estimateHtml() {
         if (!data) return 'Estimated Flashcards: <span>Locked</span>';
+        if (mode() === 'kb1-endless') {
+            return window.Endless ? window.Endless.estimateHtml(endlessSource(true)) : 'Recall now: <span>…</span> · Long-term: <span>…</span> · Fading: <span>…</span>';
+        }
         const label = mode() === 'kb1-exam' ? 'Exam questions' : 'Estimated Flashcards';
         return `${label}: <span>${KB1Core.estimate(data, options(), mode())}</span>`;
     }
@@ -150,5 +155,25 @@ window.KB1 = (function () {
                  kanjiAll: data.vocabulary.filter(w => w.type === 'kanji'), opts };
     }
 
-    return { init, isUnlocked, findWord, kanjiByChar, estimateHtml, source, mode, options };
+    // Endless mode's pool: KB1Core.selectWords over every Step in the bundle, or only the ticked Steps
+    // when "Only the Steps ticked above" is on. It ignores the known-word list (endless learns that
+    // itself) and never reads knownIds(). quiet: no alerts (estimator).
+    function endlessSource(quiet) {
+        if (!data) { if (!quiet) alert('Please unlock the 漢字基礎１ tab first.'); return null; }
+        const ticked = Array.from(document.querySelectorAll('[data-kb1-step]'))
+            .filter(cb => cb.checked).map(cb => parseInt(cb.dataset.kb1Step, 10));
+        const filter = !!($('kb1-endless-filter') && $('kb1-endless-filter').checked);
+        const allSteps = [...new Set(data.vocabulary.flatMap(w => w.kb1.steps))].sort((a, b) => a - b);
+        const steps = filter ? ticked : allSteps;
+        if (!steps.length) { if (!quiet) alert('Please choose at least one Step.'); return null; }
+        const opts = {
+            steps,
+            includeExtra: !!($('kb1-include-extra') && $('kb1-include-extra').checked),
+            exclude: new Set(),
+        };
+        return { words: KB1Core.selectWords(data, opts), kanjiAll: data.vocabulary.filter(w => w.type === 'kanji'),
+                 steps, furigana: !$('kb1-furigana') || $('kb1-furigana').checked };
+    }
+
+    return { init, isUnlocked, findWord, kanjiByChar, estimateHtml, source, endlessSource, mode, options };
 })();

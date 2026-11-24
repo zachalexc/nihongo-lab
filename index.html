@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Japanese Study App</title>
-    <link rel="stylesheet" href="style.css?v=1.12">
+    <link rel="stylesheet" href="style.css?v=1.14">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         /* UI Lab Theme Overrides */
@@ -728,6 +728,30 @@
                             </label>
                             </div>
                         </div>
+                        <div class="kb1-mode-label">Endless</div>
+                        <div class="checkbox-group">
+                                <label class="checkbox-label active-option">
+                                    <input type="radio" name="kb1-mode" value="kb1-endless">
+                                    <span class="custom-checkbox"></span>
+                                    Endless: word → reading (learns what you know)
+                                </label>
+                        </div>
+                        <div id="kb1-endless-options" class="hidden kb1-endless-options">
+                            <label class="checkbox-label active-option">
+                                <input type="checkbox" id="kb1-endless-filter">
+                                <span class="custom-checkbox"></span>
+                                Only the Steps ticked above (off = all Steps)
+                            </label>
+                            <div id="kb1-endless-summary" class="kb1-endless-line"></div>
+                            <div class="kb1-endless-actions">
+                                <button type="button" id="endless-export-btn" class="btn btn-secondary">Export progress</button>
+                                <button type="button" id="endless-import-btn" class="btn btn-secondary">Import</button>
+                                <button type="button" id="endless-reset-btn" class="btn btn-secondary">Reset progress</button>
+                                <input type="file" id="endless-import-file" accept="application/json,.json" class="hidden">
+                            </div>
+                            <div id="kb1-endless-note" class="kb1-endless-line"></div>
+                            <div id="kb1-endless-warn" class="kb1-endless-line kb1-endless-warn hidden"></div>
+                        </div>
                         <div class="kb1-mode-label">Mock exam</div>
                         <div class="checkbox-group">
                                 <label class="checkbox-label active-option">
@@ -958,6 +982,29 @@
                 </div>
             </div>
         </section>
+        <section id="endless-section" class="hidden">
+            <div class="study-card endless-card">
+                <button type="button" id="endless-close-btn" class="close-btn" title="Back to Settings">&times;</button>
+                <div class="session-counter"><span id="endless-counter">0 answered</span> <span id="endless-kind" class="endless-kind"></span></div>
+                <div class="study-content">
+                    <h2 class="prompt-text" id="endless-prompt">Loading...</h2>
+                    <input type="text" id="endless-input" class="answer-input" placeholder="Type the reading…" autocomplete="nope" autocorrect="off" autocapitalize="none" spellcheck="false" lang="ja">
+                    <div class="prompt-text endless-feedback" id="endless-feedback"></div>
+                    <div id="endless-stop" class="endless-stop hidden">Everything fading is refreshed. Keep going for new words, or stop here.</div>
+                </div>
+                <div class="study-actions" style="margin-top: 1.5rem;">
+                    <button type="button" id="endless-show-btn" class="btn btn-secondary hidden" title="Show the answer (you don't know this word yet)">Show me</button>
+                    <button type="button" id="endless-typo-btn" class="btn btn-secondary hidden" title="Count this answer as a typo (near miss). Once per 20 answers.">That was a typo</button>
+                    <button type="button" id="endless-stats-btn" class="btn btn-secondary">Stats</button>
+                    <button type="button" id="endless-end-btn" class="btn btn-secondary">End</button>
+                    <button type="button" id="endless-submit-btn" class="btn btn-primary">Submit</button>
+                </div>
+                <div id="endless-stats" class="endless-stats hidden">
+                    <div class="endless-stats-head">Progress <select id="endless-stats-filter" class="answer-input"></select></div>
+                    <div id="endless-stats-body"></div>
+                </div>
+            </div>
+        </section>
     </div>
 
     <div id="stroke-order-popup" class="stroke-order-popup hidden">
@@ -968,7 +1015,11 @@
 
     <script src="https://unpkg.com/wanakana"></script>
     <script src="kb1_core.js?v=1.14"></script>
-    <script src="kb1.js?v=1.8"></script>
-    <script src="app.js?v=1.13"></script>
+    <script src="kb1.js?v=1.9"></script>
+    <script src="srs_core.js?v=2.0"></script>
+    <script src="srs_content_kb.js?v=1.0"></script>
+    <script src="srs_store.js?v=2.0"></script>
+    <script src="endless.js?v=2.0"></script>
+    <script src="app.js?v=1.14"></script>
 </body>
 </html>

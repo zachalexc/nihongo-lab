@@ -691,6 +691,12 @@ function initializeSession() {
     // --- 漢字基礎１ (class section): the class data is in the app's own formats, so the existing
     // modes use the shared builders; only the class-only modes come from kb1_core.js ---
     if (AppState.currentCategory === 'kb1') {
+        // Endless mode runs its own session screen (endless.js); nothing else here changes.
+        if (AppState.currentStudyMode === 'kb1-endless') {
+            const es = window.KB1 && window.Endless ? window.KB1.endlessSource() : null;
+            if (es) window.Endless.start(es);
+            return;
+        }
         const src = window.KB1 ? window.KB1.source() : null;
         if (!src) return;
         const mode = AppState.currentStudyMode;
@@ -3035,6 +3041,8 @@ async function initApp() {
             decryptEncFile, flashElementColor, updateLiveEstimator, renderMasterList, saveSettings,
             knownIds: () => Array.from(AppState.knownWords)
         });
+        // 8. Endless mode (class tab): its own progress store, opened in the background
+        if (window.Endless) window.Endless.init({ settingsSection: UI.settingsSection, updateLiveEstimator, flashElementColor });
     } catch (error) {
         console.error('Failed to initialize application:', error);
     }
