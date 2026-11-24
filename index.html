@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Japanese Study App</title>
-    <link rel="stylesheet" href="style.css?v=1.15">
+    <link rel="stylesheet" href="style.css?v=1.16">
     <link rel="manifest" href="manifest.webmanifest?v=1.0">
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
     <meta name="theme-color" content="#121212">
@@ -994,11 +994,13 @@
                 <div class="study-content">
                     <h2 class="prompt-text" id="endless-prompt">Loading...</h2>
                     <input type="text" id="endless-input" class="answer-input" placeholder="Type the reading…" autocomplete="nope" autocorrect="off" autocapitalize="none" spellcheck="false" lang="ja">
+                    <div id="endless-hint" class="endless-hint hidden"></div>
                     <div class="prompt-text endless-feedback" id="endless-feedback"></div>
+                    <button type="button" id="endless-undo-btn" class="endless-undo hidden" title="Undo (Ctrl+Z / ⌘Z): void this answer; the word comes back in a few words">Undo — that Enter was a mistake</button>
                     <div id="endless-stop" class="endless-stop hidden">Everything fading is refreshed. Keep going for new words, or stop here.</div>
                 </div>
                 <div class="study-actions" style="margin-top: 1.5rem;">
-                    <button type="button" id="endless-show-btn" class="btn btn-secondary hidden" title="Show the answer (you don't know this word yet)">Show me</button>
+                    <button type="button" id="endless-show-btn" class="btn btn-secondary hidden" title="Show the answer (Shift+Enter)">Show me</button>
                     <button type="button" id="endless-typo-btn" class="btn btn-secondary hidden" title="Count this answer as a typo (near miss). Once per 20 answers.">That was a typo</button>
                     <button type="button" id="endless-stats-btn" class="btn btn-secondary">Stats</button>
                     <button type="button" id="endless-end-btn" class="btn btn-secondary">End</button>
@@ -1021,10 +1023,10 @@
     <script src="vendor/wanakana.min.js?v=5.3.1"></script>
     <script src="kb1_core.js?v=1.14"></script>
     <script src="kb1.js?v=1.9"></script>
-    <script src="srs_core.js?v=2.1"></script>
+    <script src="srs_core.js?v=2.2"></script>
     <script src="srs_content_kb.js?v=1.0"></script>
-    <script src="srs_store.js?v=2.0"></script>
-    <script src="endless.js?v=2.1"></script>
+    <script src="srs_store.js?v=2.1"></script>
+    <script src="endless.js?v=2.2"></script>
     <script src="app.js?v=1.15"></script>
 </body>
 </html>

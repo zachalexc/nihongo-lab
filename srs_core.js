@@ -43,6 +43,8 @@
         BASELINE_MIN: 10,
         BASELINE_KEEP: 50,          // clean samples kept for the running median
         TYPO_EVERY: 20,             // "That was a typo": once per this many answers (across sessions)
+        UNDO_EVERY: 10,             // "Undo — that Enter was a mistake": once per this many answers (across sessions)
+        ENTER_GUARD_MS: 500,        // Enter / Submit are ignored this long after a prompt (or the retype box) appears
         DAY_START_HOUR: 4,          // the study day starts at 04:00 local time
         RECENT_KEEP: 5,             // answers kept in state.recent
         CLEAN_DAYS_KEEP: 5,
@@ -73,7 +75,7 @@
     const gapConfirm = W => Math.max(TUNING.GAP_CONFIRM_MIN, W + 2);
 
     // Class codes (stored in state.recent and the log)
-    const CLS = { CLEAN: 'C', SLOW: 'S', NEAR: 'N', WRONG: 'W', TYPO: 'T', UNKNOWN: 'U' };
+    const CLS = { CLEAN: 'C', SLOW: 'S', NEAR: 'N', WRONG: 'W', TYPO: 'T', UNKNOWN: 'U', VOID: 'V' };   // V: an undone answer (log only)
 
     // ------------------------------------------------------------------ kana
     const toHiragana = s => String(s).replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
@@ -413,7 +415,12 @@
         }
         const out = { state: s, grade: g, R, action: null, retype: false, fastTrack: false, relearn: false, mastered: false };
 
-        if (firstSight) {
+        if (firstSight && loop && loop.fresh) {
+            // a voided first sight coming back: the reading was already seen, so no fast-track; a pass gets the confirm
+            s.st = 'learning';
+            if (isPass(cls)) out.action = 'confirm';
+            else { out.action = 'retry'; out.retype = cls === CLS.WRONG || cls === CLS.UNKNOWN; }
+        } else if (firstSight) {
             if (isRight(cls)) { s.st = 'memory'; s.ft = true; out.fastTrack = true; }            // known already
             else { s.st = 'learning'; out.action = 'retry'; out.retype = cls === CLS.WRONG || cls === CLS.UNKNOWN; }
         } else if (loop) {
@@ -454,7 +461,7 @@
     // ------------------------------------------------------------------ session, loop and picking
     // sess.loop: [{ key, at, need }] — a loop word is due back when sess.n >= at
     function newSession(W) {
-        return { n: 0, recentKeys: [], loop: [], sinceNew: 0, W: W || TUNING.W_START };
+        return { n: 0, recentKeys: [], loop: [], sinceNew: 0, W: W || TUNING.W_START, hold: {} };
     }
     const inLoop = (sess, key) => sess.loop.find(e => e.key === key) || null;
 
@@ -474,7 +481,8 @@
     function pickNext(items, states, sess, now) {
         if (!items.length) return null;
         const lastKey = sess.recentKeys[sess.recentKeys.length - 1];
-        const ok = k => k !== lastKey;
+        const hold = sess.hold || {};
+        const ok = k => k !== lastKey && !(hold[k] > sess.n);       // held: an undone answer's word waits a few items
         const byKey = new Map(items.map(it => [it.key, it]));
         const loopKeys = new Set(sess.loop.map(e => e.key));
         const room = sess.loop.length < sess.W;
@@ -494,7 +502,7 @@
                 if (R < TUNING.LOST && R < lostR) { lost = it; lostR = R; }
             }
             if (lost) return { item: lost, kind: 'relearn', loop: null };
-            const fresh = items.find(it => !states[it.key] && ok(it.key));
+            const fresh = items.find(it => !states[it.key] && !loopKeys.has(it.key) && ok(it.key));
             return fresh ? { item: fresh, kind: 'new', loop: null } : null;
         };
 
@@ -576,6 +584,41 @@
         return r;
     }
 
+    // ------------------------------------------------------------------ input shape and "Undo"
+    // Unfinished IME input: Latin letters left after normalising, other than one trailing n (which is always
+    // treated as ん-in-progress, whatever the answer, so this looks at the input's shape only).
+    function unfinishedInput(raw) {
+        return /[a-z]/.test(normalize(raw, ['ん']).kana);
+    }
+    // Can the answer just given be undone? Only U, or W/N whose input is a strict prefix of an accepted
+    // reading (an unfinished entry); once per UNDO_EVERY answers across sessions; not after the typo button.
+    // last: { item, cls, kana, typoUsed, undone }
+    function undoEligible(item, cls, kana) {
+        if (cls === CLS.UNKNOWN) return true;
+        if (cls !== CLS.WRONG && cls !== CLS.NEAR) return false;
+        if (!kana) return false;
+        return expectedOf(item).some(e => e.length > kana.length && e.startsWith(kana));
+    }
+    function canUndo(meta, last) {
+        if (!last || last.undone || last.typoUsed || !undoEligible(last.pick.item, last.cls, last.kana)) return false;
+        const at = meta && typeof meta.undoLastAt === 'number' ? meta.undoLastAt : null;
+        return at === null || (meta.answerCount - at) >= TUNING.UNDO_EVERY;
+    }
+    const cloneSession = sess => JSON.parse(JSON.stringify(sess));
+    // After the session was restored to its snapshot from before the voided answer: make the word wait
+    // at least GAP_MISS items. A voided first sight comes back as a fresh attempt (no fast-track).
+    function holdAfterVoid(sess, key, wasFirstSight) {
+        const at = sess.n + TUNING.GAP_MISS;
+        sess.hold = sess.hold || {};
+        const e = inLoop(sess, key);
+        if (wasFirstSight) {
+            sess.loop = sess.loop.filter(x => x.key !== key);
+            sess.loop.push({ key, at, need: 'retry', fresh: true });
+        } else if (e) e.at = Math.max(e.at, at);
+        else sess.hold[key] = at;
+        return sess;
+    }
+
     // ------------------------------------------------------------------ progress
     function goodStop(items, states, sess, now) {
         return sess.loop.length === 0 && fadingList(items, states, sess, now).length === 0;
@@ -604,7 +647,7 @@
             bands[BANDS.findIndex(([lo, hi]) => s.s >= lo && s.s < hi)]++;
         }
         // T marks a typo fix and f: 'x' an answer in another mode: neither counts for accuracy or speed
-        const entries = (log || []).filter(e => keys.has(e.k) && e.c !== CLS.TYPO && e.f !== 'x');
+        const entries = (log || []).filter(e => keys.has(e.k) && e.c !== CLS.TYPO && e.c !== CLS.VOID && e.f !== 'x');
         const right = entries.filter(e => e.c === CLS.CLEAN || e.c === CLS.SLOW).length;
         const graded = entries.filter(e => e.c !== CLS.UNKNOWN);
         const speeds = entries.filter(e => e.c === CLS.CLEAN && typeof e.ms === 'number' && e.m && !e.f).map(e => e.ms / e.m);
@@ -635,6 +678,6 @@
         localDay, dayEnd, gapConfirm,
         forgettingCurve, fsrsInit, fsrsStep, fsrsNext, recall, gradeFor,
         newState, checkMastered, applyAnswer, applyExternal, newSession, inLoop, fadingList, pickNext, placeLoop, recordAnswer,
-        paceCounts, updatePace, canTypo, applyTypo, goodStop, recallNow, progress, confusedWith,
+        paceCounts, updatePace, canTypo, applyTypo, unfinishedInput, undoEligible, canUndo, cloneSession, holdAfterVoid, goodStop, recallNow, progress, confusedWith,
     };
 }));

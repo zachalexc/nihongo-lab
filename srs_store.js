@@ -3,7 +3,8 @@
 //   const store = await SrsStore.local();     // browser: IndexedDB, or localStorage if IndexedDB won't open
 //   const store = SrsStore.memory();          // tests
 //   await store.load()       -> { meta, states: { key: state }, warnings: [...] }
-//   await store.saveAnswer({ key, state, logEntry, metaPatch })   // one write per answer
+//   await store.saveAnswer({ key, state, logEntry, metaPatch }) -> logId   // one write per answer
+//   await store.voidAnswer({ key, prevState, metaSnapshot, logId, voidEntry }) // "Undo": restore in one write
 //   await store.saveMeta(patch);  await store.getLog()
 //   await store.exportAll() -> object;  store.summary(obj);  await store.importAll(obj);  await store.reset()
 //
@@ -84,14 +85,18 @@
             async putMeta(m) { write('meta', m); },
             async getItems() { return read('items', {}); },
             async putItem(key, state) { const all = read('items', {}); all[key] = state; write('items', all); },
+            async deleteItem(key) { const all = read('items', {}); delete all[key]; write('items', all); },
             async putItems(map) { write('items', map); },
             async appendLog(entry) {
                 const log = read('log', []);
-                log.push(entry);
+                const id = uuid();
+                log.push(Object.assign({ _id: id }, entry));
                 while (log.length > LOG_KEEP) log.shift();
                 writeLog(log);
+                return id;
             },
-            async getLog() { return read('log', []); },
+            async removeLog(id) { writeLog(read('log', []).filter(e => e._id !== id)); },
+            async getLog() { return read('log', []).map(e => { const c = Object.assign({}, e); delete c._id; return c; }); },
             async setLog(entries) { writeLog(entries.slice(-LOG_KEEP)); },
             async clear(keepMeta) {
                 const keys = [];
@@ -147,12 +152,25 @@
                 for (const [key, state] of Object.entries(map)) st.put(Object.assign({ key }, state));
                 await done(tx);
             },
-            // One transaction per answer: item state, log entry and meta together.
+            // One transaction per answer: item state, log entry and meta together. -> the log entry's key
             async saveAnswer({ key, state, logEntry, meta }) {
                 const tx = db.transaction(['items', 'log', 'meta'], 'readwrite');
                 if (key) tx.objectStore('items').put(Object.assign({ key }, state));
                 if (meta) tx.objectStore('meta').put(meta, 'meta');
-                if (logEntry) { tx.objectStore('log').add(logEntry); await trimLog(tx); }
+                let logId = null;
+                if (logEntry) { logId = await req2p(tx.objectStore('log').add(logEntry)); await trimLog(tx); }
+                await done(tx);
+                return logId;
+            },
+            // "Undo": the item state as it was (or no record), meta as it was, the answer's log entry removed
+            // and a V entry added -- one transaction.
+            async voidAnswer({ key, prevState, meta, logId, voidEntry }) {
+                const tx = db.transaction(['items', 'log', 'meta'], 'readwrite');
+                if (prevState) tx.objectStore('items').put(Object.assign({ key }, prevState));
+                else tx.objectStore('items').delete(key);
+                tx.objectStore('meta').put(meta, 'meta');
+                if (logId !== null && logId !== undefined) tx.objectStore('log').delete(logId);
+                if (voidEntry) tx.objectStore('log').add(voidEntry);
                 await done(tx);
             },
             async appendLog(entry) {
@@ -223,8 +241,21 @@
             metaCache = m;
             if (backend.saveAnswer) return backend.saveAnswer({ key, state, logEntry, meta: m });
             if (key) await backend.putItem(key, state);
-            if (logEntry) await backend.appendLog(logEntry);
+            const logId = logEntry ? await backend.appendLog(logEntry) : null;
             await backend.putMeta(m);
+            return logId;
+        }
+
+        // "Undo — that Enter was a mistake": put back the item state (prevState null = no record), meta as it
+        // was before the answer, remove the answer's log entry and log { k, t, c: 'V' } instead.
+        async function voidAnswer({ key, prevState, metaSnapshot, logId, voidEntry }) {
+            const m = Object.assign({}, metaSnapshot);
+            metaCache = m;
+            if (backend.voidAnswer) return backend.voidAnswer({ key, prevState, meta: m, logId, voidEntry });
+            if (prevState) await backend.putItem(key, prevState); else await backend.deleteItem(key);
+            await backend.putMeta(m);
+            if (logId !== null && logId !== undefined) await backend.removeLog(logId);
+            if (voidEntry) await backend.appendLog(voidEntry);
         }
 
         async function saveMeta(patch) {
@@ -279,7 +310,7 @@
             await meta();
         }
 
-        return { load, saveAnswer, saveMeta, getLog, exportAll, importAll, summary, validate, reset, backend };
+        return { load, saveAnswer, voidAnswer, saveMeta, getLog, exportAll, importAll, summary, validate, reset, backend };
     }
 
     async function local() {

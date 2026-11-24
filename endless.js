@@ -19,6 +19,7 @@ window.Endless = (function () {
     // session
     let items = [], classKanji = null, hoverMap = new Map(), sess = null, pick = null, last = null, phase = 'idle';
     let t0 = 0, paused = false, statsOpen = false, sum = null;
+    let shownAt = 0;                           // when the prompt (or the retype box) appeared: the Enter guard
     let externalQueue = [];                    // class-mode answers waiting for the store to open
     let storeFailed = false;
     let storagePersistent = null;              // navigator.storage.persisted() result
@@ -65,7 +66,8 @@ window.Endless = (function () {
         });
 
         $('endless-submit-btn').addEventListener('click', submitOrNext);
-        $('endless-show-btn').addEventListener('click', () => { if (phase === 'question' && pick.kind === 'new') answer('', elapsed(), paused); });
+        $('endless-show-btn').addEventListener('click', showMe);
+        $('endless-undo-btn').addEventListener('click', undo);
         $('endless-typo-btn').addEventListener('click', typo);
         $('endless-end-btn').addEventListener('click', endSession);
         $('endless-close-btn').addEventListener('click', backToSettings);
@@ -83,12 +85,19 @@ window.Endless = (function () {
         const input = $('endless-input');
         if (window.wanakana) window.wanakana.bind(input, { IMEMode: true });
         input.addEventListener('keydown', e => {
-            if (e.key === 'Enter') { e.preventDefault(); submitOrNext(); }
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                if (e.repeat) return;                                       // a held Enter never answers
+                if (e.shiftKey) { showMe(); return; }                       // Shift+Enter = Show me
+                submitOrNext();
+            } else if (isUndoKey(e) && !input.value) { e.preventDefault(); undo(); }
         });
         document.addEventListener('keydown', e => {
-            if ($('endless-section').classList.contains('hidden') || phase !== 'feedback') return;
-            if (e.target === input && e.key === 'Enter') return;          // handled above
-            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); next(); }
+            if ($('endless-section').classList.contains('hidden')) return;
+            if (e.target === input) return;                                // handled above
+            if (isUndoKey(e)) { e.preventDefault(); undo(); return; }
+            if (phase !== 'feedback') return;
+            if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); next(); }
         });
         // The timer pauses when the tab is hidden or the window loses focus.
         document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
@@ -96,6 +105,10 @@ window.Endless = (function () {
     }
 
     function pause() { if (phase === 'question') paused = true; }
+    const isUndoKey = e => (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === 'z' || e.key === 'Z');
+    // Enter / Submit / Show me are ignored for ENTER_GUARD_MS after a prompt or the retype box appears
+    const settling = () => performance.now() - shownAt < Core.TUNING.ENTER_GUARD_MS;
+    function hint(text) { const el = $('endless-hint'); el.textContent = text || ''; el.classList.toggle('hidden', !text); }
 
     // iOS Safari, not installed: Add to Home Screen keeps the storage (copied from match.js's tip)
     function renderInstallTip() {
@@ -187,14 +200,16 @@ window.Endless = (function () {
         pick = Core.pickNext(items, states, sess, now);
         if (!pick) { endSession(); return; }
         const it = pick.item;
-        const first = pick.kind === 'new';
         $('endless-prompt').innerHTML =
             `<div class="kb1-word" lang="ja">${KB1Core.wordRubyHtml(it.src, classKanji)}</div>` +
-            `<div class="kb1-instruction">Type the reading (hiragana or katakana)${first ? ' — or press Enter / Show me if you don\'t know it yet' : ''}</div>`;
+            `<div class="kb1-instruction">Type the reading (hiragana or katakana)</div>`;
         $('endless-kind').textContent = KIND_TAG[pick.kind] || '';
         $('endless-feedback').innerHTML = '';
         $('endless-typo-btn').classList.add('hidden');
-        $('endless-show-btn').classList.toggle('hidden', !first);
+        $('endless-show-btn').classList.remove('hidden');               // every prompt (Shift+Enter)
+        hint('');
+        // the answer just given can still be undone on this prompt (the double-Enter case)
+        $('endless-undo-btn').classList.toggle('hidden', !(last && last.answeredAt === sess.n && Core.canUndo(meta, last)));
         const input = $('endless-input');
         input.value = ''; input.readOnly = false; input.classList.remove('hidden', 'endless-retyping');
         input.placeholder = 'Type the reading…';
@@ -205,6 +220,7 @@ window.Endless = (function () {
         phase = 'question';
         paused = false;
         t0 = performance.now();
+        shownAt = t0;
         input.focus();
     }
 
@@ -215,9 +231,19 @@ window.Endless = (function () {
     function submitOrNext() {
         if (phase === 'feedback') { next(); return; }
         if (phase === 'done') { backToSettings(); return; }
-        if (phase === 'retype') { checkRetype(); return; }
-        if (phase !== 'question') return;
-        answer($('endless-input').value, elapsed(), paused);
+        if (phase === 'retype') { if (!settling()) checkRetype(); return; }
+        if (phase !== 'question' || settling()) return;
+        const raw = $('endless-input').value;
+        // an empty Enter never grades; nor does unfinished IME input (by its shape only)
+        if (!raw.trim()) { hint('Type the reading, or press Show me if you don\'t know it'); return; }
+        if (Core.unfinishedInput(raw)) { hint('Finish typing the reading, then press Enter'); return; }
+        answer(raw, elapsed(), paused);
+    }
+
+    // Show me: on a word's first sight "I don't know it yet" (U); later it counts as wrong (W)
+    function showMe() {
+        if (phase !== 'question' || settling()) return;
+        answer('', elapsed(), paused);
     }
 
     async function answer(raw, ms, wasPaused) {
@@ -225,8 +251,11 @@ window.Endless = (function () {
         const it = pick.item;
         const prevState = states[it.key] || null;
         const res = Core.classify(it, raw, { ms, paused: wasPaused, baseline: Core.baselineOf(meta.baseline), firstSight: !prevState });
-        const actx = { ratio: res.ratio, loop: pick.loop ? { need: pick.loop.need } : null };
+        const actx = { ratio: res.ratio, loop: pick.loop ? { need: pick.loop.need, fresh: !!pick.loop.fresh } : null };
         const r = Core.applyAnswer(prevState, res.cls, now, actx);
+        // snapshots for "Undo": everything this answer changes
+        const sessBefore = Core.cloneSession(sess), metaBefore = JSON.parse(JSON.stringify(meta));
+        const sumBefore = Object.assign({}, sum, { longTerm: new Set(sum.longTerm) });
         states[it.key] = r.state;
         const loopBefore = JSON.parse(JSON.stringify(sess.loop));
         Core.recordAnswer(sess, pick, r);
@@ -248,15 +277,55 @@ window.Endless = (function () {
         if (res.paused || res.distracted) entry.f = res.distracted ? 'd' : 'p';
         if (conf) entry.conf = conf.key;
         log.push(entry); while (log.length > Store.LOG_KEEP) log.shift();
-        last = { prevState, now, ctx: actx, pick, answeredAt: sess.n, cls: res.cls, typoUsed: false, counted, loopBefore };
+        last = { prevState, now, ctx: actx, pick, answeredAt: sess.n, cls: res.cls, kana: res.kana, typoUsed: false, counted, loopBefore,
+                 sessBefore, metaBefore, sumBefore, entry, savePromise: null, undone: false };
         // session summary
         sum.answers++;
         if (res.cls !== 'U') { sum.graded++; if (right) sum.right++; }
         if (!prevState) sum.fresh++;
         if ((!prevState || prevState.s < Core.TUNING.LONG_TERM_S) && r.state.s >= Core.TUNING.LONG_TERM_S) sum.longTerm.add(it.key);
         showFeedback(it, res, r, conf);
-        try { await store.saveAnswer({ key: it.key, state: r.state, logEntry: entry, metaPatch: patch }); }
+        const mine = last;
+        mine.savePromise = store.saveAnswer({ key: it.key, state: r.state, logEntry: entry, metaPatch: patch });
+        try { mine.logId = await mine.savePromise; }
         catch (e) { console.warn('Endless: save failed', e); warnings = ['Saving failed: ' + (e && e.message || e)]; renderWarnings(); }
+    }
+
+    // "Undo — that Enter was a mistake": void the answer just given (U, or an unfinished entry), restoring the
+    // word's state, meta, the session and the log; the word comes back after at least GAP_MISS items.
+    async function undo() {
+        if (!Core.canUndo(meta, last)) return;
+        if (!(phase === 'feedback' || phase === 'retype' || (phase === 'question' && last.answeredAt === sess.n))) return;
+        const u = last;
+        u.undone = true;
+        const onPrompt = phase === 'question';
+        try { await u.savePromise; } catch (_) { /* nothing was stored */ }
+        const key = u.pick.item.key;
+        if (u.prevState) states[key] = u.prevState; else delete states[key];
+        meta = Object.assign(JSON.parse(JSON.stringify(u.metaBefore)), { undoLastAt: u.metaBefore.answerCount || 0 });
+        const keepPick = onPrompt ? pick : null;
+        sess = Core.holdAfterVoid(Core.cloneSession(u.sessBefore), key, !u.prevState);
+        sum = u.sumBefore;
+        const i = log.lastIndexOf(u.entry); if (i >= 0) log.splice(i, 1);
+        const now = Date.now();
+        const voidEntry = { k: key, t: now, c: Core.CLS.VOID };
+        log.push(voidEntry);
+        last = null;
+        const input = $('endless-input'); input.oninput = null;
+        try { await store.voidAnswer({ key, prevState: u.prevState, metaSnapshot: meta, logId: u.logId, voidEntry }); }
+        catch (e) { console.warn('Endless: undo failed', e); warnings = ['Saving failed: ' + (e && e.message || e)]; renderWarnings(); }
+        if (onPrompt && keepPick && keepPick.item.key !== key) {
+            // stay on this prompt; restart its timer, marked paused for this answer
+            pick = keepPick;
+            $('endless-undo-btn').classList.add('hidden');
+            updateCounter(now);
+            phase = 'question';
+            t0 = performance.now(); shownAt = t0; paused = true;
+            input.value = ''; input.focus();
+        } else {
+            next();
+        }
+        hint('Undone — it\'ll come back in a few words');
     }
 
     // The reading over the word, part by part (furigana split); falls back to "word (reading)".
@@ -288,6 +357,8 @@ window.Endless = (function () {
             if (w && KB1Core.wordHoverHtml) w.innerHTML = KB1Core.wordHoverHtml(it.src, hoverMap, !!classKanji);
         }
         $('endless-typo-btn').classList.toggle('hidden', !Core.canTypo(meta, last));
+        $('endless-undo-btn').classList.toggle('hidden', !Core.canUndo(meta, last));
+        hint('');
         updateCounter();
         if (statsOpen) renderStats();
         if (r.retype && retypeOn()) {
@@ -296,6 +367,7 @@ window.Endless = (function () {
             input.placeholder = 'Type the reading to continue…';
             $('endless-submit-btn').textContent = 'Next →';
             $('endless-submit-btn').disabled = true;
+            shownAt = performance.now();                                 // the guard covers the retype box too
             input.focus();
             input.oninput = () => { $('endless-submit-btn').disabled = !input.value.trim(); };
         } else {
@@ -337,6 +409,7 @@ window.Endless = (function () {
         const entry = { k: key, t: now, c: Core.CLS.TYPO, r: null, d: Core.localDay(now), g: r.grade };
         log.push(entry);
         $('endless-typo-btn').classList.add('hidden');
+        $('endless-undo-btn').classList.add('hidden');
         const head = $('endless-feedback').querySelector('.endless-class');
         if (head) { head.className = 'kb1-feedback endless-class endless-T'; head.innerHTML = `<span class="kb1-ng">~</span> ${CLASS_TEXT.T} (near miss)`; }
         const input = $('endless-input');
@@ -364,6 +437,9 @@ window.Endless = (function () {
         input.classList.add('hidden');
         $('endless-typo-btn').classList.add('hidden');
         $('endless-show-btn').classList.add('hidden');
+        $('endless-undo-btn').classList.add('hidden');
+        hint('');
+        last = null;
         $('endless-submit-btn').textContent = 'Back to Settings';
         $('endless-submit-btn').disabled = false;
         phase = 'done';
@@ -450,7 +526,7 @@ window.Endless = (function () {
     function setNote(text) { const el = $('kb1-endless-note'); if (el) el.textContent = text; }
 
     // For tests
-    function _state() { return { meta, states, log, sess, pick, phase, items: items.length, backend: store && store.backend.kind, warnings }; }
+    function _state() { return { meta, states, log, sess, pick, phase, items: items.length, backend: store && store.backend.kind, warnings, shownAt, paused, last: last && { cls: last.cls, kana: last.kana, answeredAt: last.answeredAt } }; }
     async function _seed(newStates) {          // tests: replace the stored states
         for (const [k, s] of Object.entries(newStates)) { states[k] = s; await store.saveAnswer({ key: k, state: s }); }
     }

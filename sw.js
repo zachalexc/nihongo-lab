@@ -7,19 +7,19 @@
 // Bump CACHE_VERSION whenever a precached file's ?v= changes (test_srs.js checks the list against index.html).
 'use strict';
 
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;
 const CACHE = 'nl-shell-' + CACHE_VERSION;
 const PRECACHE = [
     './',
     'index.html',
-    'style.css?v=1.15',
+    'style.css?v=1.16',
     'vendor/wanakana.min.js?v=5.3.1',
     'kb1_core.js?v=1.14',
     'kb1.js?v=1.9',
-    'srs_core.js?v=2.1',
+    'srs_core.js?v=2.2',
     'srs_content_kb.js?v=1.0',
-    'srs_store.js?v=2.0',
-    'endless.js?v=2.1',
+    'srs_store.js?v=2.1',
+    'endless.js?v=2.2',
     'app.js?v=1.15',
     'manifest.webmanifest?v=1.0',
     'icons/icon-192.png',
