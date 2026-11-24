@@ -19,6 +19,18 @@ window.Endless = (function () {
     // session
     let items = [], classKanji = null, hoverMap = new Map(), sess = null, pick = null, last = null, phase = 'idle';
     let t0 = 0, paused = false, statsOpen = false, sum = null;
+    let externalQueue = [];                    // class-mode answers waiting for the store to open
+    let storeFailed = false;
+    let storagePersistent = null;              // navigator.storage.persisted() result
+    let installPrompt = null;                  // beforeinstallprompt event (Chrome, Edge, Android)
+
+    // "Install app" for browsers that offer it; registered at load so the event isn't missed.
+    window.addEventListener('beforeinstallprompt', e => {
+        e.preventDefault();
+        installPrompt = e;
+        const btn = document.getElementById('endless-install-btn');
+        if (btn) btn.classList.remove('hidden');
+    });
 
     function init(context) {
         ctx = context;
@@ -28,11 +40,28 @@ window.Endless = (function () {
             meta = d.meta; states = d.states; warnings = d.warnings || [];
             log = await s.getLog();
             renderWarnings();
+            renderInstallTip();
+            await flushExternal();
             ctx.updateLiveEstimator();
         }).catch(e => {
             console.warn('Endless: storage failed', e);
+            externalQueue = []; storeFailed = true;     // evidence from other modes is dropped quietly
             warnings = ['Progress could not be loaded on this device: ' + (e && e.message || e)];
             renderWarnings();
+        });
+        if (navigator.storage && navigator.storage.persisted) {
+            navigator.storage.persisted().then(v => { storagePersistent = v; }).catch(() => {});
+        }
+        $('endless-ios-tip-close').addEventListener('click', () => {
+            if (meta) { meta.iosTipDismissed = true; store.saveMeta({ iosTipDismissed: true }); }
+            $('endless-ios-tip').classList.add('hidden');
+        });
+        $('endless-install-btn').addEventListener('click', async () => {
+            if (!installPrompt) return;
+            installPrompt.prompt();
+            try { await installPrompt.userChoice; } catch (_) { /* */ }
+            installPrompt = null;
+            $('endless-install-btn').classList.add('hidden');
         });
 
         $('endless-submit-btn').addEventListener('click', submitOrNext);
@@ -67,6 +96,38 @@ window.Endless = (function () {
     }
 
     function pause() { if (phase === 'question') paused = true; }
+
+    // iOS Safari, not installed: Add to Home Screen keeps the storage (copied from match.js's tip)
+    function renderInstallTip() {
+        const ios = /iP(hone|od|ad)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        const standalone = navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+        $('endless-ios-tip').classList.toggle('hidden', !(ios && !standalone && meta && !meta.iosTipDismissed));
+    }
+
+    // ---------------------------------------------------------------- evidence from the class modes
+    // A first typed word → reading answer in a class mode (app.js gradeClassQuestion). Fire-and-forget:
+    // never awaited by the caller, never throws, never changes the class flow.
+    function recordExternal(word, correct, now) {
+        try {
+            if (storeFailed || !word || !word.base || !Content.hasKanji(word.base.kanji)) return;
+            const ev = { key: Content.keyOf(word.base.kanji, word.base.kana), correct: !!correct, now: now || Date.now() };
+            if (!meta || !store) { externalQueue.push(ev); return; }
+            writeExternal(ev).catch(e => console.warn('Endless: external save failed', e));
+        } catch (e) { console.warn('Endless: recordExternal failed', e); }
+    }
+    async function writeExternal(ev) {
+        const r = Core.applyExternal(states[ev.key] || null, ev.correct, ev.now);
+        if (!r) return;
+        states[ev.key] = r.state;
+        const entry = { k: ev.key, t: ev.now, c: ev.correct ? Core.CLS.CLEAN : Core.CLS.WRONG, r: null,
+                        d: Core.localDay(ev.now), g: r.grade, R: Math.round(r.R * 1e4) / 1e4, f: 'x' };
+        log.push(entry); while (log.length > Store.LOG_KEEP) log.shift();
+        await store.saveAnswer({ key: ev.key, state: r.state, logEntry: entry });
+    }
+    async function flushExternal() {
+        const q = externalQueue; externalQueue = [];
+        for (const ev of q) { try { await writeExternal(ev); } catch (e) { console.warn('Endless: external save failed', e); } }
+    }
     const elapsed = () => Math.round(performance.now() - t0);
     const retypeOn = () => !$('kb1-retype') || $('kb1-retype').checked;
 
@@ -103,9 +164,9 @@ window.Endless = (function () {
         hoverMap = KB1Core.classKanji(src.kanjiAll, src.steps);      // same Steps as the pool
         classKanji = src.furigana === false ? null : hoverMap;
         if (!meta.persistAsked && navigator.storage && navigator.storage.persist) {
-            navigator.storage.persist().catch(() => {});
             meta.persistAsked = true;
             store.saveMeta({ persistAsked: true });
+            navigator.storage.persist().then(v => { storagePersistent = v; }).catch(() => {});
         }
         sess = Core.newSession(meta.W);
         const now = Date.now();
@@ -339,7 +400,8 @@ window.Endless = (function () {
             `<div class="endless-statline">${p.learning} learning · ${p.notStarted} not started · ${p.fading} fading · working set ${sess ? sess.W : meta.W}</div>` +
             `<div class="endless-statline">Accuracy ${p.accuracy === null ? '—' : Math.round(100 * p.accuracy) + '%'} (${p.answers} answers) · ` +
             `median speed ${p.medianMsPerMora === null ? '—' : (p.medianMsPerMora / 1000).toFixed(2) + ' s per mora'}</div>` +
-            `<div class="endless-bands"><div class="endless-statline">How long words last (stability)</div>${bars}</div>`;
+            `<div class="endless-bands"><div class="endless-statline">How long words last (stability)</div>${bars}</div>` +
+            (storagePersistent === null ? '' : `<div class="endless-statline" id="endless-storage">Storage: ${storagePersistent ? 'persistent' : 'may be cleared by the browser'}</div>`);
         $('endless-stats-body').dataset.json = JSON.stringify(p);
     }
 
@@ -393,5 +455,6 @@ window.Endless = (function () {
         for (const [k, s] of Object.entries(newStates)) { states[k] = s; await store.saveAnswer({ key: k, state: s }); }
     }
 
-    return { init, start, estimateHtml, _state, _seed, ready: () => storeReady };
+    return { init, start, estimateHtml, recordExternal, _state, _seed, ready: () => storeReady,
+             _queue: () => externalQueue.length };
 })();

@@ -911,9 +911,15 @@ input[type="range"]::-moz-range-thumb {
 .kb1-endless-actions .btn { padding: 0.4rem 0.8rem; font-size: 0.85rem; }
 .kb1-endless-line { font-size: 0.8rem; color: var(--text-secondary); min-height: 1em; }
 .kb1-endless-warn { color: var(--error-color); }
+.kb1-endless-tip { display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.8rem; color: var(--text-secondary); padding: 0.5rem 0.75rem; border: 1px solid var(--accent-color); border-radius: 8px; background: rgba(92, 138, 255, 0.08); }
+.kb1-endless-tip.hidden { display: none; }
+.kb1-endless-tip-close { margin-left: auto; background: none; border: none; color: var(--text-secondary); font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 0 0.25rem; }
 #endless-section { display: flex; justify-content: center; align-items: center; flex-grow: 1; }
 #endless-section.hidden { display: none; }
 .endless-card .study-content { margin: 2.5rem 0 1rem; }
+/* the kanji hover cards are absolutely positioned (hidden until hovered); on hover app.js shifts them inside the
+   card, so clipping at the card keeps a narrow window from scrolling sideways */
+.endless-card { overflow-x: clip; }
 .endless-kind { margin-left: 0.4rem; color: var(--accent-color); }
 .endless-kind:empty { display: none; }
 #endless-prompt { margin-bottom: 1.25rem; }

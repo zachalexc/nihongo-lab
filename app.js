@@ -1364,6 +1364,11 @@ function gradeClassQuestion(question, submittedAnswer) {
         loadNextQuestion();
         return;
     }
+    // Endless mode evidence: first answers to typed word → reading questions (not re-asks, retypes,
+    // multiple choice or the exam). Fire-and-forget: the class flow never waits on it.
+    if (question.qtype === 'reading-typed' && !question.step && window.Endless && window.KB1) {
+        try { window.Endless.recordExternal(window.KB1.findWord(question.wordId), result.correct, Date.now()); } catch (e) { /* never blocks */ }
+    }
     const target = question.choices ? UI.choiceBtnsContainer : UI.answerInput;
     flashElementColor(target, result.correct ? 'var(--success-color)' : 'var(--error-color)');
     if (question.choices) {
@@ -3049,5 +3054,10 @@ async function initApp() {
 }
 
 initApp();
+
+// Offline support (PWA): the service worker caches the site so it also works without a connection.
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+}
 
 })();

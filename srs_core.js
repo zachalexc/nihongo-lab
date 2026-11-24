@@ -432,6 +432,25 @@
         return out;
     }
 
+    // Evidence from the class modes (phase 2b): a typed word → reading answer outside endless.
+    // correct -> Good (no timing, so never Easy); wrong -> Again (a lapse on a memory word). Same-day rules
+    // as usual. A correct answer on a word with no record creates a memory record (ft not set); a wrong one
+    // creates nothing. No loop entry, and nothing about pace, typo, baseline or answer counts changes here.
+    // cleanDays and recent stay as they are (no timing: mastery needs timed clean answers).
+    // -> { state, grade, R } or null (nothing to record)
+    function applyExternal(prev, correct, now) {
+        if (!prev && !correct) return null;
+        const g = correct ? GRADE.GOOD : GRADE.AGAIN;
+        const s = Object.assign(newState(), prev ? JSON.parse(JSON.stringify(prev)) : {});
+        const R = prev ? recall(prev, now) : 0;
+        const mem = fsrsNext(prev || null, g, now);
+        s.s = mem.s; s.d = mem.d; s.lr = now; s.reps++; s.seen++; s.last = now;
+        if (!prev) s.st = 'memory';
+        if (correct) s.correct++;
+        else { if (s.st === 'memory') s.lapses++; s.grad = null; }
+        return { state: s, grade: g, R };
+    }
+
     // ------------------------------------------------------------------ session, loop and picking
     // sess.loop: [{ key, at, need }] — a loop word is due back when sess.n >= at
     function newSession(W) {
@@ -584,7 +603,8 @@
             if (s.grad !== null) mastered++;
             bands[BANDS.findIndex(([lo, hi]) => s.s >= lo && s.s < hi)]++;
         }
-        const entries = (log || []).filter(e => keys.has(e.k) && e.c !== CLS.TYPO);    // T marks a typo fix, not an answer
+        // T marks a typo fix and f: 'x' an answer in another mode: neither counts for accuracy or speed
+        const entries = (log || []).filter(e => keys.has(e.k) && e.c !== CLS.TYPO && e.f !== 'x');
         const right = entries.filter(e => e.c === CLS.CLEAN || e.c === CLS.SLOW).length;
         const graded = entries.filter(e => e.c !== CLS.UNKNOWN);
         const speeds = entries.filter(e => e.c === CLS.CLEAN && typeof e.ms === 'number' && e.m && !e.f).map(e => e.ms / e.m);
@@ -614,7 +634,7 @@
         isRealReadingError, isKeySlip, slipDistance, isNeighbour, classify, median, baselineOf, updateBaseline,
         localDay, dayEnd, gapConfirm,
         forgettingCurve, fsrsInit, fsrsStep, fsrsNext, recall, gradeFor,
-        newState, checkMastered, applyAnswer, newSession, inLoop, fadingList, pickNext, placeLoop, recordAnswer,
+        newState, checkMastered, applyAnswer, applyExternal, newSession, inLoop, fadingList, pickNext, placeLoop, recordAnswer,
         paceCounts, updatePace, canTypo, applyTypo, goodStop, recallNow, progress, confusedWith,
     };
 }));

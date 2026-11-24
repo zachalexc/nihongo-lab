@@ -7,7 +7,10 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Japanese Study App</title>
-    <link rel="stylesheet" href="style.css?v=1.14">
+    <link rel="stylesheet" href="style.css?v=1.15">
+    <link rel="manifest" href="manifest.webmanifest?v=1.0">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <meta name="theme-color" content="#121212">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         /* UI Lab Theme Overrides */
@@ -751,6 +754,8 @@
                             </div>
                             <div id="kb1-endless-note" class="kb1-endless-line"></div>
                             <div id="kb1-endless-warn" class="kb1-endless-line kb1-endless-warn hidden"></div>
+                            <div id="endless-ios-tip" class="kb1-endless-tip hidden"><span>Add to Home Screen keeps your progress safe on iPhone (Safari may clear it after 7 days without use).</span> <button type="button" id="endless-ios-tip-close" class="kb1-endless-tip-close" title="Dismiss">&times;</button></div>
+                            <div><button type="button" id="endless-install-btn" class="btn btn-secondary hidden">Install app</button></div>
                         </div>
                         <div class="kb1-mode-label">Mock exam</div>
                         <div class="checkbox-group">
@@ -1013,13 +1018,13 @@
         <div id="stroke-order-caption" class="stroke-order-caption"></div>
     </div>
 
-    <script src="https://unpkg.com/wanakana"></script>
+    <script src="vendor/wanakana.min.js?v=5.3.1"></script>
     <script src="kb1_core.js?v=1.14"></script>
     <script src="kb1.js?v=1.9"></script>
-    <script src="srs_core.js?v=2.0"></script>
+    <script src="srs_core.js?v=2.1"></script>
     <script src="srs_content_kb.js?v=1.0"></script>
     <script src="srs_store.js?v=2.0"></script>
-    <script src="endless.js?v=2.0"></script>
-    <script src="app.js?v=1.14"></script>
+    <script src="endless.js?v=2.1"></script>
+    <script src="app.js?v=1.15"></script>
 </body>
 </html>
