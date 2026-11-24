@@ -20,6 +20,7 @@ window.Endless = (function () {
     let items = [], classKanji = null, hoverMap = new Map(), sess = null, pick = null, last = null, phase = 'idle';
     let t0 = 0, paused = false, statsOpen = false, sum = null;
     let shownAt = 0;                           // when the prompt (or the retype box) appeared: the Enter guard
+    let missFeedback = false;                  // the feedback screen after a miss is guarded too (the reading must be seen)
     let externalQueue = [];                    // class-mode answers waiting for the store to open
     let storeFailed = false;
     let storagePersistent = null;              // navigator.storage.persisted() result
@@ -97,7 +98,7 @@ window.Endless = (function () {
             if (e.target === input) return;                                // handled above
             if (isUndoKey(e)) { e.preventDefault(); undo(); return; }
             if (phase !== 'feedback') return;
-            if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); next(); }
+            if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); if (!(missFeedback && settling())) next(); }
         });
         // The timer pauses when the tab is hidden or the window loses focus.
         document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
@@ -229,7 +230,7 @@ window.Endless = (function () {
     }
 
     function submitOrNext() {
-        if (phase === 'feedback') { next(); return; }
+        if (phase === 'feedback') { if (!(missFeedback && settling())) next(); return; }
         if (phase === 'done') { backToSettings(); return; }
         if (phase === 'retype') { if (!settling()) checkRetype(); return; }
         if (phase !== 'question' || settling()) return;
@@ -372,6 +373,10 @@ window.Endless = (function () {
             input.oninput = () => { $('endless-submit-btn').disabled = !input.value.trim(); };
         } else {
             phase = 'feedback';
+            // after a miss (W, N, U) the reading must be seen: Enter / Space / Next wait ENTER_GUARD_MS;
+            // after a correct answer Enter moves on at once
+            missFeedback = !ok;
+            if (missFeedback) shownAt = performance.now();
             input.readOnly = true;
             $('endless-submit-btn').textContent = 'Next →';
             $('endless-submit-btn').disabled = false;
@@ -415,6 +420,7 @@ window.Endless = (function () {
         const input = $('endless-input');
         input.oninput = null; input.readOnly = true; input.classList.remove('endless-retyping');
         phase = 'feedback';
+        missFeedback = true;                                          // T is still a miss: the guard stays
         $('endless-submit-btn').disabled = false;
         $('endless-submit-btn').focus();
         try { await store.saveAnswer({ key, state: r.state, logEntry: entry, metaPatch: patch }); }
