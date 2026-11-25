@@ -23,6 +23,7 @@ window.Endless = (function () {
     let ctx = null;          // from app.js: settingsSection, updateLiveEstimator, flashElementColor
     let store = null, storeReady = null;
     let meta = null, states = {}, log = [];
+    const logKeep = () => (store && store.backend && store.backend.logKeep) || Store.LOG_KEEP_LS;   // the store's own limit
     let warnings = [];
     // session
     let items = [], classKanji = null, hoverMap = new Map(), sess = null, pick = null, last = null, phase = 'idle';
@@ -161,7 +162,7 @@ window.Endless = (function () {
         Object.assign(meta, patch);
         const entry = { k: ev.key, t: ev.now, c: ev.correct ? Core.CLS.CLEAN : Core.CLS.WRONG, r: null,
                         d: Core.localDay(ev.now), g: r.grade, R: Math.round(r.R * 1e4) / 1e4, f: 'x' };
-        log.push(entry); while (log.length > Store.LOG_KEEP) log.shift();
+        log.push(entry); while (log.length > logKeep()) log.shift();
         await store.saveAnswer({ key: ev.key, state: r.state, logEntry: entry, metaPatch: patch });
         cloud.answersSinceSync++;
         maybeSync('answers');
@@ -303,7 +304,7 @@ window.Endless = (function () {
         promptA++;
         const now = Date.now();
         const entry = { k: it.key, t: now, c: Core.CLS.OTHER, alt: o.key };
-        log.push(entry); while (log.length > Store.LOG_KEEP) log.shift();
+        log.push(entry); while (log.length > logKeep()) log.shift();
         store.saveAnswer({ key: null, logEntry: entry }).catch(e => console.warn('Endless: save failed', e));
         hint(`Yes, ${it.text} can be read ${o.reading} (${o.gloss}). Here it means "${sib.here}". Which reading fits?`);
         $('endless-hint').classList.add('endless-other');
@@ -352,10 +353,11 @@ window.Endless = (function () {
         let conf = (res.cls === 'W' || res.cls === 'N') ? Core.confusedWith(it, res.kana, items) : null;
         if (conf && sib && sib.others.some(o => o.key === conf.key)) conf = null;     // siblings get "Also read" instead
         const entry = { k: it.key, t: now, c: res.cls, r: res.ratio === null ? null : Math.round(res.ratio * 100) / 100,
-                        ms, m: res.mora, d: Core.localDay(now), g: r.grade, R: Math.round(r.R * 1e4) / 1e4 };
+                        ms, m: res.mora, d: Core.localDay(now), g: r.grade, R: Math.round(r.R * 1e4) / 1e4,
+                        w: metaBefore.W };                                   // the working set before this answer's pace update
         if (res.paused || res.distracted) entry.f = res.distracted ? 'd' : 'p';
         if (conf) entry.conf = conf.key;
-        log.push(entry); while (log.length > Store.LOG_KEEP) log.shift();
+        log.push(entry); while (log.length > logKeep()) log.shift();
         last = { metaAfterWB: JSON.parse(JSON.stringify(meta.baseline || [])), wAfter: meta.W, prevState, now, ctx: actx, pick, answeredAt: sess.n, cls: res.cls, kana: res.kana, typoUsed: false, counted, loopBefore,
                  sessBefore, metaBefore, sumBefore, entry, savePromise: null, undone: false };
         // session summary
@@ -513,8 +515,8 @@ window.Endless = (function () {
             patch.accWindow = meta.accWindow;
         }
         const now = Date.now();
-        const entry = { k: key, t: now, c: Core.CLS.TYPO, r: null, d: Core.localDay(now), g: r.grade };
-        log.push(entry);
+        const entry = { k: key, t: now, c: Core.CLS.TYPO, r: null, d: Core.localDay(now), g: r.grade, w: last.metaBefore.W };
+        log.push(entry); while (log.length > logKeep()) log.shift();
         $('endless-typo-btn').classList.add('hidden');
         $('endless-undo-btn').classList.add('hidden');
         const head = $('endless-feedback').querySelector('.endless-class');

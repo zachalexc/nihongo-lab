@@ -20,7 +20,10 @@
 
     const SCHEMA = 2;               // v2 "Flow" (FSRS state); a schema-1 store is cleared on load
     const FORMAT = 'nihongo-endless-export';
-    const LOG_KEEP = 2000;
+    // Answer log entries kept on the device, per backend (round 15): IndexedDB keeps the full history for fitting
+    // (~80 bytes an entry, so at most ~4 MB); the localStorage fallback stays small because of its ~5 MB quota.
+    const LOG_KEEP_IDB = 50000;
+    const LOG_KEEP_LS = 2000;
     const DB_NAME = 'nihongoEndless';
     const PREFIX = 'nihongoEndless.v1.';
 
@@ -63,8 +66,9 @@
     // ---------------------------------------------------------------- backends
     // A backend has: getMeta, putMeta, getItems, putItem, appendLog, getLog, setLog, clear.
 
-    function storageBackend(storage) {
+    function storageBackend(storage, opts = {}) {
         const warnings = [];
+        const logKeep = opts.logKeep || LOG_KEEP_LS;
         function read(key, fallback) {
             const raw = storage.getItem(PREFIX + key);
             if (raw === null) return fallback;
@@ -88,7 +92,7 @@
             }
         }
         return {
-            kind: 'storage', warnings,
+            kind: 'storage', warnings, logKeep,
             async getMeta() { return read('meta', null); },
             async putMeta(m) { write('meta', m); },
             async getItems() { return read('items', {}); },
@@ -99,13 +103,13 @@
                 const log = read('log', []);
                 const id = uuid();
                 log.push(Object.assign({ _id: id }, entry));
-                while (log.length > LOG_KEEP) log.shift();
+                while (log.length > logKeep) log.shift();
                 writeLog(log);
                 return id;
             },
             async removeLog(id) { writeLog(read('log', []).filter(e => e._id !== id)); },
             async getLog() { return read('log', []).map(e => { const c = Object.assign({}, e); delete c._id; return c; }); },
-            async setLog(entries) { writeLog(entries.slice(-LOG_KEEP)); },
+            async setLog(entries) { writeLog(entries.slice(-logKeep)); },
             async clear(keepMeta) {
                 const keys = [];
                 for (let i = 0; i < storage.length; i++) {
@@ -118,15 +122,16 @@
     }
 
     // IndexedDB: stores "items" (keyPath key), "meta" (one record, key "meta"), "log" (autoIncrement).
-    function idbBackend(db) {
+    function idbBackend(db, opts = {}) {
+        const logKeep = opts.logKeep || LOG_KEEP_IDB;
         const req2p = r => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
         const done = tx => new Promise((res, rej) => { tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error); });
         const strip = rec => { const s = Object.assign({}, rec); delete s.key; return s; };
         async function trimLog(tx) {
             const store = tx.objectStore('log');
             const n = await req2p(store.count());
-            if (n <= LOG_KEEP) return;
-            let extra = n - LOG_KEEP;
+            if (n <= logKeep) return;
+            let extra = n - logKeep;
             await new Promise((res, rej) => {
                 const cur = store.openCursor();
                 cur.onsuccess = () => {
@@ -138,7 +143,7 @@
             });
         }
         return {
-            kind: 'indexeddb', warnings: [], db,
+            kind: 'indexeddb', warnings: [], db, logKeep,
             async getMeta() { const tx = db.transaction('meta'); return (await req2p(tx.objectStore('meta').get('meta'))) || null; },
             async putMeta(m) { const tx = db.transaction('meta', 'readwrite'); tx.objectStore('meta').put(m, 'meta'); await done(tx); },
             async getItems() {
@@ -201,7 +206,7 @@
                 const tx = db.transaction('log', 'readwrite');
                 const st = tx.objectStore('log');
                 st.clear();
-                for (const e of entries.slice(-LOG_KEEP)) st.add(e);
+                for (const e of entries.slice(-logKeep)) st.add(e);
                 await done(tx);
             },
             async clear(keepMeta) {
@@ -213,10 +218,10 @@
         };
     }
 
-    function openIdb(idb) {
+    function openIdb(idb, name = DB_NAME) {
         return new Promise((res, rej) => {
             let r;
-            try { r = idb.open(DB_NAME, 1); } catch (e) { rej(e); return; }
+            try { r = idb.open(name, 1); } catch (e) { rej(e); return; }
             r.onupgradeneeded = () => {
                 const db = r.result;
                 if (!db.objectStoreNames.contains('items')) db.createObjectStore('items', { keyPath: 'key' });
@@ -352,9 +357,9 @@
     }
 
     return {
-        SCHEMA, FORMAT, LOG_KEEP, DB_NAME, PREFIX, CLOUD_FIELDS, uuid, memoryStorage, create,
+        SCHEMA, FORMAT, LOG_KEEP_IDB, LOG_KEEP_LS, DB_NAME, PREFIX, CLOUD_FIELDS, uuid, memoryStorage, create,
         storageBackend, idbBackend, openIdb, local,
-        memory: () => create(storageBackend(memoryStorage())),
+        memory: opts => create(storageBackend(memoryStorage(), opts)),
         fromStorage: storage => create(storageBackend(storage)),
     };
 }));

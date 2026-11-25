@@ -12,7 +12,7 @@
 // Bump CACHE_VERSION whenever a precached file's ?v= changes (test_srs.js checks the list against index.html).
 'use strict';
 
-const CACHE_VERSION = 9;
+const CACHE_VERSION = 10;
 const CACHE = 'nl-shell-' + CACHE_VERSION;
 const DATA_CACHE = 'nl-data';
 const DATA_PATH = /\/jlpt_(words|beyond)\.json$/;
@@ -23,14 +23,14 @@ const PRECACHE = [
     'vendor/wanakana.min.js?v=5.3.1',
     'kb1_core.js?v=1.14',
     'kb1.js?v=1.9',
-    'srs_core.js?v=2.5',
+    'srs_core.js?v=2.6',
     'srs_content_kb.js?v=1.1',
     'srs_content_jlpt.js?v=1.1',
-    'srs_store.js?v=2.2',
+    'srs_store.js?v=2.3',
     'srs_sync.js?v=1.0',
     'firebase_config.js?v=1.1',
     'cloud_firebase.js?v=1.0',
-    'endless.js?v=2.8',
+    'endless.js?v=2.9',
     'app.js?v=1.16',
     'manifest.webmanifest?v=1.0',
     'icons/icon-192.png',

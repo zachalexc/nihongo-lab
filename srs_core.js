@@ -1,5 +1,5 @@
 // Endless mode: the learning engine (pure logic, no DOM, no storage). v2 "Flow" (2.4: one-pass picker, round 10;
-// 2.5: several readings of one spelling, round 12).
+// 2.5: several readings of one spelling, round 12; 2.6: STATS_LOG replaces LOG_KEEP, round 15).
 // Runs in the browser (window.SrsCore) and in Node for the tests (require('./srs_core.js')).
 //
 // It classes a typed answer (clean / slow / near miss / wrong / unknown), keeps a memory model per
@@ -49,7 +49,8 @@
         DAY_START_HOUR: 4,          // the study day starts at 04:00 local time
         RECENT_KEEP: 5,             // answers kept in state.recent
         CLEAN_DAYS_KEEP: 5,
-        LOG_KEEP: 2000,             // answer log entries kept on the device
+        STATS_LOG: 2000,            // accuracy and median speed look at the last this-many log entries (the log itself
+                                    // keeps more since round 15: SrsStore.LOG_KEEP_IDB / LOG_KEEP_LS)
         // memory model and picking (v2)
         TARGET: 0.90,               // a memory word is fading when its recall probability R < TARGET
         LOST: 0.35,                 // below this it is relearned like a new word, not asked as a review
@@ -668,7 +669,7 @@
             bands[BANDS.findIndex(([lo, hi]) => s.s >= lo && s.s < hi)]++;
         }
         // T marks a typo fix and f: 'x' an answer in another mode: neither counts for accuracy or speed
-        const entries = (log || []).filter(e => keys.has(e.k) && e.c !== CLS.TYPO && e.c !== CLS.VOID && e.c !== CLS.OTHER && e.f !== 'x');
+        const entries = (log || []).slice(-TUNING.STATS_LOG).filter(e => keys.has(e.k) && e.c !== CLS.TYPO && e.c !== CLS.VOID && e.c !== CLS.OTHER && e.f !== 'x');
         const right = entries.filter(e => e.c === CLS.CLEAN || e.c === CLS.SLOW).length;
         const graded = entries.filter(e => e.c !== CLS.UNKNOWN);
         const speeds = entries.filter(e => e.c === CLS.CLEAN && typeof e.ms === 'number' && e.m && !e.f).map(e => e.ms / e.m);
