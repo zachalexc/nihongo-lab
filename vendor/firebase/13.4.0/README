@@ -1,0 +1,10 @@
+Firebase JavaScript SDK 13.4.0, vendored for Endless mode cloud sync (loaded only on sign-in).
+
+Source: the npm package firebase@13.4.0 (the same modular CDN builds gstatic serves).
+Changes: absolute https://www.gstatic.com/firebasejs/<v>/ imports rewritten to ./, and the
+sourceMappingURL comments removed. Made by nihongo-lab-private/vendor_firebase.py.
+
+file | sha256 in the npm package | sha256 here | bytes
+firebase-app.js | 26673f502611bc7b382edfee3230c70954dd5e4982779185c7b6b657b5f69737 | 7f82bdcac269fd394e4e39c4a3f1f8771a71c030fab42ae7857d4d59360721d1 | 111874
+firebase-auth.js | 9be3b6574c0c46f4a0bfb8d85436c30c89871a8d5a9fbeb0e0137d90a74667e9 | 094b86c94aeb57ee09c6e39383d890b0e2ee852ef4fb9a0aef1b15db084f7441 | 158186
+firebase-firestore-lite.js | 1188353a27e205592c352421f8270afa4cec0160f25a024c0b204fa5f758d4c4 | e275433382ea92f815b2f5f136dfefa427396850faef830f3affbf79d70113a9 | 157580

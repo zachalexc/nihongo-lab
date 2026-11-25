@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Japanese Study App</title>
-    <link rel="stylesheet" href="style.css?v=1.16">
+    <link rel="stylesheet" href="style.css?v=1.17">
     <link rel="manifest" href="manifest.webmanifest?v=1.0">
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
     <meta name="theme-color" content="#121212">
@@ -752,6 +752,13 @@
                                 <button type="button" id="endless-reset-btn" class="btn btn-secondary">Reset progress</button>
                                 <input type="file" id="endless-import-file" accept="application/json,.json" class="hidden">
                             </div>
+                            <div id="endless-cloud" class="kb1-endless-cloud">
+                                <span id="endless-cloud-line" class="kb1-endless-line">Cloud sync: Sign in with Google to use your progress on other devices</span>
+                                <button type="button" id="endless-signin-btn" class="btn btn-secondary">Sign in</button>
+                                <button type="button" id="endless-signout-btn" class="btn btn-secondary hidden">Sign out</button>
+                                <button type="button" id="endless-delete-cloud-btn" class="btn btn-secondary hidden">Delete my cloud data</button>
+                                <div id="endless-cloud-privacy" class="kb1-endless-line hidden">Stored in the cloud: your Google account id and email, the words you've studied and their stats. Your answer history stays on this device.</div>
+                            </div>
                             <div id="kb1-endless-note" class="kb1-endless-line"></div>
                             <div id="kb1-endless-warn" class="kb1-endless-line kb1-endless-warn hidden"></div>
                             <div id="endless-ios-tip" class="kb1-endless-tip hidden"><span>Add to Home Screen keeps your progress safe on iPhone (Safari may clear it after 7 days without use).</span> <button type="button" id="endless-ios-tip-close" class="kb1-endless-tip-close" title="Dismiss">&times;</button></div>
@@ -990,7 +997,7 @@
         <section id="endless-section" class="hidden">
             <div class="study-card endless-card">
                 <button type="button" id="endless-close-btn" class="close-btn" title="Back to Settings">&times;</button>
-                <div class="session-counter"><span id="endless-counter">0 answered</span> <span id="endless-kind" class="endless-kind"></span></div>
+                <div class="session-counter"><span id="endless-counter">0 answered</span> <span id="endless-kind" class="endless-kind"></span> <span id="endless-unsynced" class="endless-unsynced hidden" title="Not synced: the last cloud sync failed. It will try again.">●</span></div>
                 <div class="study-content">
                     <h2 class="prompt-text" id="endless-prompt">Loading...</h2>
                     <input type="text" id="endless-input" class="answer-input" placeholder="Type the reading…" autocomplete="nope" autocorrect="off" autocapitalize="none" spellcheck="false" lang="ja">
@@ -1023,10 +1030,13 @@
     <script src="vendor/wanakana.min.js?v=5.3.1"></script>
     <script src="kb1_core.js?v=1.14"></script>
     <script src="kb1.js?v=1.9"></script>
-    <script src="srs_core.js?v=2.2"></script>
+    <script src="srs_core.js?v=2.3"></script>
     <script src="srs_content_kb.js?v=1.0"></script>
-    <script src="srs_store.js?v=2.1"></script>
-    <script src="endless.js?v=2.3"></script>
+    <script src="srs_store.js?v=2.2"></script>
+    <script src="srs_sync.js?v=1.0"></script>
+    <script src="firebase_config.js?v=1.1"></script>
+    <script src="cloud_firebase.js?v=1.0"></script>
+    <script src="endless.js?v=2.5"></script>
     <script src="app.js?v=1.15"></script>
 </body>
 </html>

@@ -374,7 +374,7 @@
     // st: 'learning' | 'memory' (new words have no record)
     function newState() {
         return { st: 'learning', s: 0, d: 0, lr: 0, reps: 0, lapses: 0, seen: 0, correct: 0,
-                 cleanDays: [], recent: [], ft: false, grad: null, last: 0 };
+                 cleanDays: [], recent: [], ft: false, grad: null, last: 0, rev: 0, mt: 0 };
     }
     const STATE_FIELDS = Object.keys(newState());
     const isRight = c => c === CLS.CLEAN || c === CLS.SLOW;
@@ -405,6 +405,7 @@
         const mem = fsrsNext(firstSight ? null : s, g, now);
         s.s = mem.s; s.d = mem.d; s.lr = now; s.reps++;
         s.seen++; s.last = now;
+        s.rev = (s.rev || 0) + 1; s.mt = now;                     // sync revision: every local change bumps it
         s.recent.push([cls, ratio === null ? null : Math.round(ratio * 100) / 100]);
         while (s.recent.length > TUNING.RECENT_KEEP) s.recent.shift();
         if (isRight(cls)) s.correct++;
@@ -452,6 +453,7 @@
         const R = prev ? recall(prev, now) : 0;
         const mem = fsrsNext(prev || null, g, now);
         s.s = mem.s; s.d = mem.d; s.lr = now; s.reps++; s.seen++; s.last = now;
+        s.rev = (s.rev || 0) + 1; s.mt = now;
         if (!prev) s.st = 'memory';
         if (correct) s.correct++;
         else { if (s.st === 'memory') s.lapses++; s.grad = null; }
@@ -580,6 +582,8 @@
     // last: { prevState, now, ctx, pick, answeredAt (sess.n after the answer) }
     function applyTypo(sess, last) {
         const r = applyAnswer(last.prevState, CLS.TYPO, last.now, last.ctx);
+        r.state.rev = ((last.prevState && last.prevState.rev) || 0) + 2;   // a new revision after the answer's own
+        r.state.mt = last.now + 1;
         placeLoop(sess, last.pick.item.key, r.action, last.answeredAt);
         return r;
     }

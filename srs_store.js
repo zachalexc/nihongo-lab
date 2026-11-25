@@ -5,6 +5,7 @@
 //   await store.load()       -> { meta, states: { key: state }, warnings: [...] }
 //   await store.saveAnswer({ key, state, logEntry, metaPatch }) -> logId   // one write per answer
 //   await store.voidAnswer({ key, prevState, metaSnapshot, logId, voidEntry }) // "Undo": restore in one write
+//   await store.applyCloud({ put: {key: state}, del: [keys], metaPatch })      // a sync result, in one write
 //   await store.saveMeta(patch);  await store.getLog()
 //   await store.exportAll() -> object;  store.summary(obj);  await store.importAll(obj);  await store.reset()
 //
@@ -47,9 +48,16 @@
         return e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014 || /quota/i.test(e.message || ''));
     }
 
+    // Cloud sync fields (phase 3; missing fields get these defaults, so the schema stays 2):
+    // uid (the Google account this device syncs with), dirty (keys changed since the last sync), tombs
+    // (undone first sights: { key: { rev, mt } }), epoch (reset epoch), lastSeenCm (per chunk), wbMt (when
+    // W / baseline last changed), pendingReset, forceUpload, cloudWiped, cloudEmail.
+    const CLOUD_DEFAULTS = () => ({ uid: null, dirty: [], tombs: {}, epoch: 0, lastSeenCm: [], wbMt: 0,
+                                    pendingReset: false, forceUpload: false, cloudWiped: false, cloudEmail: '' });
+    const CLOUD_FIELDS = Object.keys(CLOUD_DEFAULTS());
     function freshMeta() {
-        return { schema: SCHEMA, deviceId: uuid(), createdAt: Date.now(), baseline: [], answerCount: 0,
-                 typoLastAt: null, persistAsked: false, lastExportAt: null, W: 6, accWindow: [] };
+        return Object.assign({ schema: SCHEMA, deviceId: uuid(), createdAt: Date.now(), baseline: [], answerCount: 0,
+                 typoLastAt: null, persistAsked: false, lastExportAt: null, W: 6, accWindow: [] }, CLOUD_DEFAULTS());
     }
 
     // ---------------------------------------------------------------- backends
@@ -162,6 +170,15 @@
                 await done(tx);
                 return logId;
             },
+            // A sync result: items written or deleted and meta, in one transaction
+            async applyCloud({ put, del, meta }) {
+                const tx = db.transaction(['items', 'meta'], 'readwrite');
+                const st = tx.objectStore('items');
+                for (const [key, state] of Object.entries(put || {})) st.put(Object.assign({ key }, state));
+                for (const key of del || []) st.delete(key);
+                tx.objectStore('meta').put(meta, 'meta');
+                await done(tx);
+            },
             // "Undo": the item state as it was (or no record), meta as it was, the answer's log entry removed
             // and a V entry added -- one transaction.
             async voidAnswer({ key, prevState, meta, logId, voidEntry }) {
@@ -226,6 +243,8 @@
                 m = null;
             }
             if (!m) { m = freshMeta(); await backend.putMeta(m); }
+            const d = CLOUD_DEFAULTS();
+            for (const k of CLOUD_FIELDS) if (m[k] === undefined) m[k] = d[k];
             metaCache = m;
             return m;
         }
@@ -310,7 +329,16 @@
             await meta();
         }
 
-        return { load, saveAnswer, voidAnswer, saveMeta, getLog, exportAll, importAll, summary, validate, reset, backend };
+        async function applyCloud({ put, del, metaPatch }) {
+            const m = Object.assign(await meta(), metaPatch || {});
+            metaCache = m;
+            if (backend.applyCloud) return backend.applyCloud({ put, del, meta: m });
+            for (const [key, state] of Object.entries(put || {})) await backend.putItem(key, state);
+            for (const key of del || []) await backend.deleteItem(key);
+            await backend.putMeta(m);
+        }
+
+        return { load, saveAnswer, voidAnswer, applyCloud, saveMeta, getLog, exportAll, importAll, summary, validate, reset, backend };
     }
 
     async function local() {
@@ -324,7 +352,7 @@
     }
 
     return {
-        SCHEMA, FORMAT, LOG_KEEP, DB_NAME, PREFIX, uuid, memoryStorage, create,
+        SCHEMA, FORMAT, LOG_KEEP, DB_NAME, PREFIX, CLOUD_FIELDS, uuid, memoryStorage, create,
         storageBackend, idbBackend, openIdb, local,
         memory: () => create(storageBackend(memoryStorage())),
         fromStorage: storage => create(storageBackend(storage)),

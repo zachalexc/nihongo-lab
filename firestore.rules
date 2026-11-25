@@ -1,0 +1,28 @@
+rules_version = '2';
+// Endless mode cloud sync: each user reads and writes only their own users/{uid}/srs/… documents.
+// meta: { v, epoch, mt, cm[32], W, baseline, wbMt, wiped }; c00…c31: { v, epoch, mt, d (JSON string) }.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid}/srs/{doc} {
+      function owner() { return request.auth != null && request.auth.uid == uid; }
+      function chunkOk(d) {
+        return doc.matches('c(0[0-9]|[12][0-9]|3[01])') && d.keys().hasOnly(['v', 'epoch', 'mt', 'd'])
+          && d.v == 1 && d.epoch is int && d.mt is int && d.d is string && d.d.size() <= 300000;
+      }
+      function metaOk(d) {
+        return doc == 'meta' && d.keys().hasOnly(['v', 'epoch', 'mt', 'cm', 'W', 'baseline', 'wbMt', 'wiped'])
+          && d.v == 1 && d.epoch is int && d.mt is int
+          && (!('cm' in d) || (d.cm is list && d.cm.size() == 32))
+          && (!('W' in d) || (d.W is int && d.W >= 3 && d.W <= 12))
+          && (!('baseline' in d) || (d.baseline is list && d.baseline.size() <= 50))
+          && (!('wbMt' in d) || d.wbMt is int)
+          && (!('wiped' in d) || d.wiped is bool);
+      }
+      allow read, delete: if owner();
+      allow create, update: if owner() && (chunkOk(request.resource.data) || metaOk(request.resource.data));
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

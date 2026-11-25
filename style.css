@@ -913,6 +913,11 @@ input[type="range"]::-moz-range-thumb {
 .kb1-endless-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .kb1-endless-actions .btn { padding: 0.4rem 0.8rem; font-size: 0.85rem; }
 .kb1-endless-line { font-size: 0.8rem; color: var(--text-secondary); min-height: 1em; }
+.kb1-endless-cloud { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.5rem; }
+.kb1-endless-cloud .btn { padding: 0.3rem 0.7rem; font-size: 0.8rem; }
+.kb1-endless-cloud > .kb1-endless-line { flex: 1 1 14rem; }
+#endless-cloud-privacy { flex-basis: 100%; font-size: 0.72rem; }
+.endless-unsynced { color: #d9822b; font-size: 0.7rem; vertical-align: middle; }
 .kb1-endless-warn { color: var(--error-color); }
 .kb1-endless-tip { display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.8rem; color: var(--text-secondary); padding: 0.5rem 0.75rem; border: 1px solid var(--accent-color); border-radius: 8px; background: rgba(92, 138, 255, 0.08); }
 .kb1-endless-tip.hidden { display: none; }

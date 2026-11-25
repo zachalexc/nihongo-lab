@@ -8,6 +8,7 @@ window.Endless = (function () {
     'use strict';
 
     const Core = window.SrsCore, Store = window.SrsStore, Content = window.SrsContentKB;
+    const Sync = window.SrsSync, Cloud = window.NLCloud;
     const $ = id => document.getElementById(id);
     const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const isKanji = c => /[㐀-䶿一-鿿豈-﫿々]/.test(c);
@@ -25,6 +26,9 @@ window.Endless = (function () {
     let storeFailed = false;
     let storagePersistent = null;              // navigator.storage.persisted() result
     let installPrompt = null;                  // beforeinstallprompt event (Chrome, Edge, Android)
+    // cloud sync (phase 3): user = the signed-in Google account; status: 'off' | 'syncing' | 'ok' | 'offline' | 'quota'
+    const cloud = { user: null, status: 'off', lastSyncAt: 0, answersSinceSync: 0, pausedUntil: 0, failed: false,
+                    running: null, again: null, note: '', syncs: 0, started: false };
 
     // "Install app" for browsers that offer it; registered at load so the event isn't missed.
     window.addEventListener('beforeinstallprompt', e => {
@@ -76,12 +80,18 @@ window.Endless = (function () {
         $('endless-stats-filter').addEventListener('change', renderStats);
         $('endless-export-btn').addEventListener('click', exportFile);
         $('endless-import-btn').addEventListener('click', () => {
-            if (!confirm('Import a backup? It replaces the Endless progress saved on this device.')) return;
+            if (!confirm(meta && meta.uid
+                ? 'Import a backup? It replaces your Endless progress on this device, in the cloud and on your other devices.'
+                : 'Import a backup? It replaces the Endless progress saved on this device.')) return;
             $('endless-import-file').value = '';
             $('endless-import-file').click();
         });
         $('endless-import-file').addEventListener('change', importFile);
         $('endless-reset-btn').addEventListener('click', resetProgress);
+        $('endless-signin-btn').addEventListener('click', signIn);
+        $('endless-signout-btn').addEventListener('click', () => signOut(''));
+        $('endless-delete-cloud-btn').addEventListener('click', deleteCloudData);
+        storeReady.then(() => { renderCloud(); if (rememberedSignIn()) startCloud(false); });
 
         const input = $('endless-input');
         if (window.wanakana) window.wanakana.bind(input, { IMEMode: true });
@@ -101,7 +111,7 @@ window.Endless = (function () {
             if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); if (!(missFeedback && settling())) next(); }
         });
         // The timer pauses when the tab is hidden or the window loses focus.
-        document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
+        document.addEventListener('visibilitychange', () => { if (document.hidden) { pause(); maybeSync('hidden'); } });
         window.addEventListener('blur', pause);
     }
 
@@ -133,10 +143,14 @@ window.Endless = (function () {
         const r = Core.applyExternal(states[ev.key] || null, ev.correct, ev.now);
         if (!r) return;
         states[ev.key] = r.state;
+        const patch = touched(ev.key, r.state);
+        Object.assign(meta, patch);
         const entry = { k: ev.key, t: ev.now, c: ev.correct ? Core.CLS.CLEAN : Core.CLS.WRONG, r: null,
                         d: Core.localDay(ev.now), g: r.grade, R: Math.round(r.R * 1e4) / 1e4, f: 'x' };
         log.push(entry); while (log.length > Store.LOG_KEEP) log.shift();
-        await store.saveAnswer({ key: ev.key, state: r.state, logEntry: entry });
+        await store.saveAnswer({ key: ev.key, state: r.state, logEntry: entry, metaPatch: patch });
+        cloud.answersSinceSync++;
+        maybeSync('answers');
     }
     async function flushExternal() {
         const q = externalQueue; externalQueue = [];
@@ -256,6 +270,7 @@ window.Endless = (function () {
         const r = Core.applyAnswer(prevState, res.cls, now, actx);
         // snapshots for "Undo": everything this answer changes
         const sessBefore = Core.cloneSession(sess), metaBefore = JSON.parse(JSON.stringify(meta));
+        const cloudPatch = touched(it.key, r.state);
         const sumBefore = Object.assign({}, sum, { longTerm: new Set(sum.longTerm) });
         states[it.key] = r.state;
         const loopBefore = JSON.parse(JSON.stringify(sess.loop));
@@ -270,6 +285,8 @@ window.Endless = (function () {
         if (res.cls === Core.CLS.CLEAN && !res.paused && !res.distracted && res.ratio !== null) {
             patch.baseline = Core.updateBaseline(meta.baseline, ms / res.mora);
         }
+        if (meta.uid && (patch.W !== meta.W || patch.baseline)) patch.wbMt = now;
+        Object.assign(patch, cloudPatch);
         Object.assign(meta, patch);
         // errors that teach
         const conf = (res.cls === 'W' || res.cls === 'N') ? Core.confusedWith(it, res.kana, items) : null;
@@ -278,7 +295,7 @@ window.Endless = (function () {
         if (res.paused || res.distracted) entry.f = res.distracted ? 'd' : 'p';
         if (conf) entry.conf = conf.key;
         log.push(entry); while (log.length > Store.LOG_KEEP) log.shift();
-        last = { prevState, now, ctx: actx, pick, answeredAt: sess.n, cls: res.cls, kana: res.kana, typoUsed: false, counted, loopBefore,
+        last = { metaAfterWB: JSON.parse(JSON.stringify(meta.baseline || [])), wAfter: meta.W, prevState, now, ctx: actx, pick, answeredAt: sess.n, cls: res.cls, kana: res.kana, typoUsed: false, counted, loopBefore,
                  sessBefore, metaBefore, sumBefore, entry, savePromise: null, undone: false };
         // session summary
         sum.answers++;
@@ -290,6 +307,8 @@ window.Endless = (function () {
         mine.savePromise = store.saveAnswer({ key: it.key, state: r.state, logEntry: entry, metaPatch: patch });
         try { mine.logId = await mine.savePromise; }
         catch (e) { console.warn('Endless: save failed', e); warnings = ['Saving failed: ' + (e && e.message || e)]; renderWarnings(); }
+        cloud.answersSinceSync++;
+        maybeSync('answers');
     }
 
     // "Undo — that Enter was a mistake": void the answer just given (U, or an unfinished entry), restoring the
@@ -302,8 +321,21 @@ window.Endless = (function () {
         const onPrompt = phase === 'question';
         try { await u.savePromise; } catch (_) { /* nothing was stored */ }
         const key = u.pick.item.key;
-        if (u.prevState) states[key] = u.prevState; else delete states[key];
-        meta = Object.assign(JSON.parse(JSON.stringify(u.metaBefore)), { undoLastAt: u.metaBefore.answerCount || 0 });
+        const vnow = Date.now();
+        const cur = states[key] || null;
+        const keepCloud = {};
+        for (const f of Store.CLOUD_FIELDS) keepCloud[f] = JSON.parse(JSON.stringify(meta[f] === undefined ? null : meta[f]));
+        // restore the values with a new revision (or a tombstone for an undone first sight) so a sync can't bring them back
+        const nextRev = Math.max(cur && cur.rev || 0, keepCloud.tombs && keepCloud.tombs[key] ? keepCloud.tombs[key].rev : 0) + 1;
+        const restored = u.prevState ? Object.assign({}, u.prevState, { rev: nextRev, mt: vnow }) : null;
+        if (restored) states[key] = restored; else delete states[key];
+        meta = Object.assign(JSON.parse(JSON.stringify(u.metaBefore)), keepCloud, { undoLastAt: u.metaBefore.answerCount || 0 });
+        if (meta.uid) {
+            meta.tombs = Object.assign({}, meta.tombs);
+            if (restored) delete meta.tombs[key]; else meta.tombs[key] = { rev: nextRev, mt: vnow };
+            if (!meta.dirty.includes(key)) meta.dirty = meta.dirty.concat([key]);
+            if (u.metaBefore.W !== u.wAfter || JSON.stringify(u.metaBefore.baseline || []) !== JSON.stringify(u.metaAfterWB)) meta.wbMt = vnow;
+        }
         const keepPick = onPrompt ? pick : null;
         sess = Core.holdAfterVoid(Core.cloneSession(u.sessBefore), key, !u.prevState);
         sum = u.sumBefore;
@@ -313,7 +345,7 @@ window.Endless = (function () {
         log.push(voidEntry);
         last = null;
         const input = $('endless-input'); input.oninput = null;
-        try { await store.voidAnswer({ key, prevState: u.prevState, metaSnapshot: meta, logId: u.logId, voidEntry }); }
+        try { await store.voidAnswer({ key, prevState: restored, metaSnapshot: meta, logId: u.logId, voidEntry }); }
         catch (e) { console.warn('Endless: undo failed', e); warnings = ['Saving failed: ' + (e && e.message || e)]; renderWarnings(); }
         if (onPrompt && keepPick && keepPick.item.key !== key) {
             // stay on this prompt; restart its timer, marked paused for this answer
@@ -405,7 +437,8 @@ window.Endless = (function () {
         states[key] = r.state;
         last.typoUsed = true;
         meta.typoLastAt = meta.answerCount;
-        const patch = { typoLastAt: meta.typoLastAt };
+        const patch = Object.assign({ typoLastAt: meta.typoLastAt }, touched(key, r.state));
+        Object.assign(meta, patch);
         if (last.counted && meta.accWindow.length) {              // the answer now counts as right for the pace
             meta.accWindow = meta.accWindow.slice(); meta.accWindow[meta.accWindow.length - 1] = true;
             patch.accWindow = meta.accWindow;
@@ -449,6 +482,7 @@ window.Endless = (function () {
         $('endless-submit-btn').textContent = 'Back to Settings';
         $('endless-submit-btn').disabled = false;
         phase = 'done';
+        maybeSync('end');
     }
 
     function backToSettings() {
@@ -508,8 +542,12 @@ window.Endless = (function () {
         try {
             const obj = JSON.parse(await f.text());
             const s = store.summary(obj);
+            await waitIdle();
+            const keep = cloudFields();
             await store.importAll(obj);
+            if (keep.uid) await store.saveMeta(Object.assign(keep, { dirty: [], tombs: {}, pendingReset: true }));
             await reload();
+            if (keep.uid) maybeSync('reset');
             setNote(`Imported ${s.items} words (${s.mastered} mastered, ${s.answers} logged answers).`);
         } catch (err) {
             setNote('Import failed: ' + (err && err.message || err));
@@ -518,10 +556,17 @@ window.Endless = (function () {
 
     async function resetProgress() {
         if (!store) return;
-        if (!confirm('Reset all Endless progress on this device? This cannot be undone. Use Export first if you might want it back.')) return;
+        const synced = !!(meta && meta.uid);
+        if (!confirm(synced
+            ? 'Reset all Endless progress on this device and in the cloud (your other devices too)? This cannot be undone. Use Export first if you might want it back.'
+            : 'Reset all Endless progress on this device? This cannot be undone. Use Export first if you might want it back.')) return;
+        await waitIdle();
+        const keep = cloudFields();
         await store.reset();
+        if (synced) await store.saveMeta(Object.assign(keep, { dirty: [], tombs: {}, pendingReset: true }));
         await reload();
         setNote('Endless progress was reset.');
+        if (synced) maybeSync('reset');
     }
 
     async function reload() {
@@ -531,12 +576,249 @@ window.Endless = (function () {
     }
     function setNote(text) { const el = $('kb1-endless-note'); if (el) el.textContent = text; }
 
+
+    // ---------------------------------------------------------------- cloud sync (phase 3)
+    // Signed out, nothing here runs apart from renderCloud(): no SDK file is requested until Sign in is tapped
+    // or the device was signed in before (localStorage nlCloud = '1'). Progress keeps working without the cloud;
+    // a failed sync only shows a note and the unsynced dot.
+    const STANDALONE_IOS_MSG = 'Sign-in doesn\'t work inside the home-screen app on some iPhones. Open the site in Safari to sign in; your progress syncs to the home-screen app afterwards.';
+    function rememberedSignIn() { try { return localStorage.getItem('nlCloud') === '1'; } catch (_) { return false; } }
+    function remember(on) { try { if (on) localStorage.setItem('nlCloud', '1'); else localStorage.removeItem('nlCloud'); } catch (_) { /* */ } }
+    function cloudFields() {
+        const out = {};
+        for (const f of Store.CLOUD_FIELDS) out[f] = JSON.parse(JSON.stringify(meta && meta[f] !== undefined ? meta[f] : null));
+        return out;
+    }
+    // A local change to one item: a state past any tombstone, and the key in the dirty set (only once this
+    // device syncs: a device that never synced uploads everything at its first sign-in). -> meta patch
+    function touched(key, state) {
+        if (!meta || !meta.uid) return {};
+        const patch = {};
+        const tomb = meta.tombs && meta.tombs[key];
+        if (tomb) {
+            if (state && (state.rev || 0) <= tomb.rev) state.rev = tomb.rev + 1;
+            patch.tombs = Object.assign({}, meta.tombs); delete patch.tombs[key];
+        }
+        if (!meta.dirty.includes(key)) patch.dirty = meta.dirty.concat([key]);
+        return patch;
+    }
+    function localView() {
+        // copies: answers given while a sync runs must not change what it works on
+        return { states: Object.assign({}, states), tombs: Object.assign({}, meta.tombs), dirty: (meta.dirty || []).slice(), epoch: meta.epoch || 0, lastSeenCm: meta.lastSeenCm || [],
+                 W: meta.W, baseline: meta.baseline || [], wbMt: meta.wbMt || 0, pendingReset: !!meta.pendingReset,
+                 forceUpload: !!meta.forceUpload, deviceId: meta.deviceId };
+    }
+    function isStandaloneIOS() {
+        const ios = /iP(hone|od|ad)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        const standalone = navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+        return !!(ios && standalone);
+    }
+    function ago(t) {
+        const s = Math.max(0, Math.round((Date.now() - t) / 1000));
+        if (s < 45) return 'just now';
+        const m = Math.round(s / 60);
+        if (m < 60) return `${m} min ago`;
+        const h = Math.round(m / 60);
+        return h < 24 ? `${h} h ago` : `${Math.round(h / 24)} d ago`;
+    }
+
+    function renderCloud() {
+        const line = $('endless-cloud-line'); if (!line) return;
+        const inBtn = $('endless-signin-btn'), outBtn = $('endless-signout-btn'), delBtn = $('endless-delete-cloud-btn');
+        const priv = $('endless-cloud-privacy');
+        const on = !!cloud.user;
+        inBtn.classList.toggle('hidden', on);
+        outBtn.classList.toggle('hidden', !on);
+        delBtn.classList.toggle('hidden', !on);
+        priv.classList.toggle('hidden', !on);
+        let text;
+        if (!on) text = cloud.note || 'Cloud sync: Sign in with Google to use your progress on other devices';
+        else {
+            const who = 'Signed in as ' + (cloud.user.email || 'your Google account');
+            const st = cloud.status === 'syncing' ? 'syncing…'
+                : cloud.status === 'quota' ? 'cloud sync is paused until tomorrow (free daily limit). Your progress is safe on this device.'
+                : cloud.status === 'offline' ? 'offline — will sync later'
+                : cloud.lastSyncAt ? 'synced ' + ago(cloud.lastSyncAt) : 'not synced yet';
+            text = who + ' · ' + st + (cloud.note ? ' · ' + cloud.note : '');
+        }
+        line.textContent = text;
+        const dot = $('endless-unsynced');
+        if (dot) dot.classList.toggle('hidden', !(on && cloud.failed));
+    }
+    function cloudNote(text) { cloud.note = text || ''; renderCloud(); }
+
+    async function signIn() {
+        if (!Cloud || !Cloud.configured()) { cloudNote('Cloud sync isn\'t set up yet'); return; }
+        cloudNote('Signing in…');
+        let user;
+        try { user = await Cloud.signIn(); }
+        catch (e) {
+            console.warn('Endless: sign-in failed', e);
+            const code = e && e.code || '';
+            if (isStandaloneIOS() && /popup|operation-not-supported|web-storage/.test(code + ' ' + (e && e.message || ''))) cloudNote(STANDALONE_IOS_MSG);
+            else if (/popup-closed|cancelled-popup/.test(code)) cloudNote('');
+            else cloudNote('Sign-in failed: ' + (e && e.message || e));
+            return;
+        }
+        if (!user) { cloudNote(''); return; }
+        await userArrived(user, true);
+    }
+
+    // At start-up for a device that was signed in: the SDK restores the session.
+    function startCloud() {
+        if (!Cloud || !Cloud.configured() || cloud.started) return;
+        cloud.started = true;
+        Promise.resolve(Cloud.onUser(u => {
+            if (u && (!cloud.user || cloud.user.uid !== u.uid)) userArrived(u, false);
+            else if (!u && cloud.user) { cloud.user = null; cloud.status = 'off'; renderCloud(); }
+        })).catch(e => { console.warn('Endless: cloud start failed', e); cloud.started = false; cloudNote('offline — will sync later'); });
+    }
+
+    // A Google account is signed in (tap, or restored). Account binding first: never merge two accounts silently.
+    async function userArrived(user, tapped) {
+        await storeReady;
+        if (!meta) return;
+        const bind = Sync.bindCheck(meta.uid, user.uid);
+        if (bind === 'other') {
+            const replace = confirm('This device has progress from another Google account. Replace it with this account\'s progress?\n\n' +
+                                    'OK = replace it with this account\'s progress. Cancel = keep it on this device and don\'t sync.');
+            if (!replace) { await signOut('Not syncing: this device keeps the other account\'s progress.'); return; }
+            await store.reset();
+            await store.saveMeta({ uid: user.uid, cloudEmail: user.email || '' });
+            await reload();
+        } else if (bind === 'first') {
+            // progress made before the first sign-in goes up (merged as usual)
+            const all = [...new Set([...Object.keys(states), ...(meta.dirty || [])])];
+            Object.assign(meta, { uid: user.uid, cloudEmail: user.email || '', dirty: all });
+            await store.saveMeta({ uid: meta.uid, cloudEmail: meta.cloudEmail, dirty: meta.dirty });
+        } else if (meta.cloudEmail !== (user.email || '')) {
+            meta.cloudEmail = user.email || ''; await store.saveMeta({ cloudEmail: meta.cloudEmail });
+        }
+        cloud.user = user;
+        cloud.started = true;
+        remember(true);
+        cloud.note = '';
+        renderCloud();
+        if (meta.cloudWiped) {
+            // this account's cloud copy was deleted earlier (here or on another device)
+            if (!confirm('Your Endless cloud data was deleted earlier. Start syncing again from this device?')) {
+                await signOut('Not syncing: the cloud copy was deleted.'); return;
+            }
+            meta.cloudWiped = false; meta.forceUpload = true;
+            await store.saveMeta({ cloudWiped: false, forceUpload: true });
+        }
+        await doSync(tapped ? 'signin' : 'load');
+    }
+
+    async function signOut(note) {
+        cloud.user = null; cloud.status = 'off'; cloud.failed = false; cloud.started = false;
+        remember(false);
+        try { if (Cloud) await Cloud.signOut(); } catch (e) { console.warn('Endless: sign-out failed', e); }
+        cloudNote(note || '');
+    }
+
+    async function deleteCloudData() {
+        if (!cloud.user) return;
+        if (!confirm('Delete your Endless progress from the cloud? It stays on this device.')) return;
+        cloudNote('Deleting…');
+        try {
+            await waitIdle();
+            const r = await Sync.deleteCloud(Cloud.adapter(cloud.user.uid), localView(), Date.now());
+            Object.assign(meta, { epoch: r.epoch, cloudWiped: true, dirty: [], tombs: {}, lastSeenCm: [], forceUpload: false, pendingReset: false });
+            await store.saveMeta({ epoch: r.epoch, cloudWiped: true, dirty: [], tombs: {}, lastSeenCm: [], forceUpload: false, pendingReset: false });
+            await signOut('Your cloud data was deleted. Progress stays on this device.');
+        } catch (e) { syncFailed(e); }
+    }
+
+    function maybeSync(reason) {
+        if (!cloud.user || !meta || !meta.uid) return;
+        const st = { dirtyCount: (meta.dirty || []).length + (meta.pendingReset ? 1 : 0) + (meta.forceUpload ? 1 : 0),
+                     lastSyncAt: cloud.lastSyncAt, answersSinceSync: cloud.answersSinceSync, pausedUntil: cloud.pausedUntil };
+        if (!Sync.shouldSync(reason, st, Date.now())) return;
+        doSync(reason).catch(e => console.warn('Endless: sync failed', e));
+    }
+    async function waitIdle() { while (cloud.running) { try { await cloud.running; } catch (_) { /* */ } } }
+
+    // One sync: a transaction in srs_sync.js, then its result written into the local store in one write.
+    function doSync(reason) {
+        if (cloud.running) {                                     // one at a time; a request while one runs follows it
+            if (!cloud.again) cloud.again = cloud.running.then(() => { cloud.again = null; return doSync(reason); }, () => { cloud.again = null; });
+            return cloud.again;
+        }
+        let followLoad = false;
+        cloud.running = (async () => {
+            if (!cloud.user) return;
+            if (cloud.pausedUntil && Date.now() < cloud.pausedUntil) { cloud.status = 'quota'; renderCloud(); return; }
+            cloud.status = 'syncing'; renderCloud();
+            const L = localView();
+            const startRevs = Sync.revsOf(L);
+            const answersAtStart = cloud.answersSinceSync;
+            const now = Date.now();
+            let res;
+            try { res = await Sync.sync(Cloud.adapter(cloud.user.uid), L, now); }
+            catch (e) { syncFailed(e); return; }
+            cloud.syncs++;
+            if (res.status === 'reset') {
+                // Reset (or an import) on another device: adopt it, then load the cloud copy
+                const keep = cloudFields();
+                await store.reset();
+                await store.saveMeta(Object.assign(keep, { epoch: res.epoch, lastSeenCm: Sync.zeros(), dirty: [], tombs: {}, pendingReset: false }));
+                await reload();
+                cloud.note = 'Progress was reset on another device.';
+                followLoad = true;
+                return;
+            }
+            if (res.status === 'wiped') {
+                meta.cloudWiped = true; meta.epoch = res.epoch;
+                await store.saveMeta({ cloudWiped: true, epoch: res.epoch });
+                await signOut('Cloud data was deleted from another device. Progress stays on this device.');
+                return;
+            }
+            // a cloud win goes into the local states, except for items changed again while the sync ran
+            // (they stay dirty and go up next time)
+            for (const k of Object.keys(res.localUpdates || {})) {
+                if (states[k] !== L.states[k] || JSON.stringify((meta.tombs || {})[k]) !== JSON.stringify(L.tombs[k])) delete res.localUpdates[k];
+            }
+            const view = { states: Object.assign({}, states), tombs: Object.assign({}, meta.tombs), dirty: (meta.dirty || []).slice(),
+                           epoch: meta.epoch, lastSeenCm: meta.lastSeenCm, W: meta.W, baseline: meta.baseline, wbMt: meta.wbMt,
+                           pendingReset: meta.pendingReset, forceUpload: meta.forceUpload };
+            Sync.applyResult(view, res, startRevs);
+            const put = {}, del = [];
+            for (const k of view.changedKeys) {
+                if (view.states[k]) { put[k] = view.states[k]; states[k] = view.states[k]; }
+                else { del.push(k); delete states[k]; }
+            }
+            const metaPatch = { tombs: view.tombs, dirty: view.dirty, epoch: view.epoch, lastSeenCm: view.lastSeenCm,
+                                pendingReset: res.resetPushed ? false : !!meta.pendingReset, forceUpload: false };
+            if (res.meta) Object.assign(metaPatch, { W: view.W, baseline: view.baseline, wbMt: view.wbMt });
+            Object.assign(meta, metaPatch);
+            await store.applyCloud({ put, del, metaPatch });
+            cloud.lastSyncAt = Date.now();
+            cloud.answersSinceSync = Math.max(0, cloud.answersSinceSync - answersAtStart);
+            cloud.failed = false; cloud.status = 'ok';
+            if (reason !== 'load') cloud.note = '';
+            renderCloud();
+            if (view.changedKeys.length && phase === 'idle') ctx.updateLiveEstimator();
+        })().finally(() => { cloud.running = null; if (followLoad) doSync('load').catch(e => console.warn('Endless: sync failed', e)); });
+        return cloud.running;
+    }
+    function syncFailed(e) {
+        console.warn('Endless: sync failed', e);
+        cloud.failed = true;
+        const code = String(e && e.code || '');
+        if (/resource-exhausted/.test(code)) { cloud.pausedUntil = Sync.nextPacificMidnight(Date.now()); cloud.status = 'quota'; }
+        else cloud.status = 'offline';
+        renderCloud();
+    }
+
     // For tests
-    function _state() { return { meta, states, log, sess, pick, phase, items: items.length, backend: store && store.backend.kind, warnings, shownAt, paused, last: last && { cls: last.cls, kana: last.kana, answeredAt: last.answeredAt } }; }
+    function _state() { return { meta, states, log, sess, pick, phase, items: items.length, backend: store && store.backend.kind, warnings, shownAt, paused, last: last && { cls: last.cls, kana: last.kana, answeredAt: last.answeredAt },
+                              cloud: { user: cloud.user, status: cloud.status, lastSyncAt: cloud.lastSyncAt, answersSinceSync: cloud.answersSinceSync,
+                                       pausedUntil: cloud.pausedUntil, failed: cloud.failed, note: cloud.note, syncs: cloud.syncs } }; }
     async function _seed(newStates) {          // tests: replace the stored states
         for (const [k, s] of Object.entries(newStates)) { states[k] = s; await store.saveAnswer({ key: k, state: s }); }
     }
 
     return { init, start, estimateHtml, recordExternal, _state, _seed, ready: () => storeReady,
-             _queue: () => externalQueue.length };
+             _queue: () => externalQueue.length, _sync: reason => (reason ? doSync(reason) : waitIdle()), _maybeSync: maybeSync, _cloud: () => cloud };
 })();
