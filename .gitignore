@@ -6,3 +6,8 @@ kanji_basic1.json
 sentences_src.txt
 kb1_bundle*.json
 kb1_sentences.json
+
+# Kanji Match build cache and review output (rebuilt by match/tools/build_match_data.py)
+match/tools/cache/
+match/tools/out/
+match/tools/__pycache__/

@@ -1,0 +1,4 @@
+# Kanji on the N1 sheet of kanji_list.xlsx that are not on the usual (Tanos) JLPT N1 list.
+# Generated once from davidluzgouveia/kanji-data kanji.json (field jlpt_new, from tanos.co.uk), 2026-11-19.
+# The game puts these in their own level, "Names & extras" (code X), off by default.
+唐匂孝椅畑股挨拶凄喉拭貌塞蹴鍵膳袖潰粧慌謎稽鍋葛曽賭貼拉枕顎苛蓋裾腫爪鬱妖捉宛崖叱瓦乞呪勃昧唾痕諦餅隙淫箸戚妬釜蔑嗅蜜戴痩怨醒詣窟巾蜂骸弄嫉罵璧阜埼曖餌詮柿芯綻肘麓頓牙咽嘲臆挫溺侶丼瘍僅柵腎梗羨酎畿畏踪栃蔽茨慄傲捻臼喩萎腺桁玩羞惧遡舷貪刹堆煎斑冥遜勾麺串塡箋脊緻辣摯汎毀賂氾諧哺彙恣沃憬捗訃璽楷剥籠錮頰

@@ -1,0 +1,228 @@
+{
+ "build": "65899685",
+ "built": "2026-11-19",
+ "levelNames": {
+  "N1": "N1",
+  "N2": "N2",
+  "N3": "N3",
+  "N4": "N4",
+  "N5": "N5",
+  "X": "Extras"
+ },
+ "levels": {
+  "N1": {
+   "count": 985,
+   "file": "kanji_N1.json",
+   "sha": "cd6f217930"
+  },
+  "N2": {
+   "count": 380,
+   "file": "kanji_N2.json",
+   "sha": "e0ee9e4813"
+  },
+  "N3": {
+   "count": 370,
+   "file": "kanji_N3.json",
+   "sha": "d93579feb9"
+  },
+  "N4": {
+   "count": 170,
+   "file": "kanji_N4.json",
+   "sha": "af4c0f190d"
+  },
+  "N5": {
+   "count": 80,
+   "file": "kanji_N5.json",
+   "sha": "3b77b68241"
+  },
+  "X": {
+   "count": 151,
+   "file": "kanji_X.json",
+   "sha": "fa9e1638e1"
+  }
+ },
+ "schema": 1,
+ "sources": {
+  "jmdict": {
+   "file": "JMdict_e.gz",
+   "licence": "CC BY-SA 4.0, EDRDG",
+   "use": "fallback example words"
+  },
+  "kanjidic2": {
+   "dictDate": "2026-11-16",
+   "licence": "CC BY-SA 4.0, EDRDG",
+   "release": "3.6.2+20261116213322",
+   "version": "3.6.2"
+  },
+  "lists": "kanji_list.xlsx; n5.txt–n1.txt"
+ },
+ "synonyms": [
+  [
+   "see",
+   "look",
+   "view",
+   "watch",
+   "look at"
+  ],
+  [
+   "say",
+   "speak",
+   "talk",
+   "tell",
+   "state"
+  ],
+  [
+   "house",
+   "home",
+   "dwelling",
+   "residence"
+  ],
+  [
+   "road",
+   "street",
+   "way",
+   "path",
+   "route"
+  ],
+  [
+   "big",
+   "large",
+   "great",
+   "huge"
+  ],
+  [
+   "small",
+   "little",
+   "tiny"
+  ],
+  [
+   "begin",
+   "start",
+   "commence"
+  ],
+  [
+   "end",
+   "finish",
+   "close"
+  ],
+  [
+   "make",
+   "create",
+   "produce"
+  ],
+  [
+   "think",
+   "consider",
+   "thought"
+  ],
+  [
+   "hear",
+   "listen"
+  ],
+  [
+   "go",
+   "going"
+  ],
+  [
+   "come",
+   "arrive"
+  ],
+  [
+   "return",
+   "go back",
+   "come back"
+  ],
+  [
+   "hit",
+   "strike",
+   "beat"
+  ],
+  [
+   "store",
+   "shop"
+  ],
+  [
+   "picture",
+   "drawing",
+   "painting"
+  ],
+  [
+   "quick",
+   "fast",
+   "swift",
+   "rapid"
+  ],
+  [
+   "before",
+   "ahead",
+   "previous",
+   "front"
+  ],
+  [
+   "after",
+   "behind",
+   "later",
+   "back"
+  ],
+  [
+   "inside",
+   "in",
+   "within",
+   "interior"
+  ],
+  [
+   "outside",
+   "exterior",
+   "out"
+  ],
+  [
+   "power",
+   "strength",
+   "force"
+  ],
+  [
+   "fear",
+   "afraid",
+   "dread",
+   "terror"
+  ],
+  [
+   "happy",
+   "glad",
+   "pleasure",
+   "joy"
+  ],
+  [
+   "sad",
+   "sorrow",
+   "grief"
+  ],
+  [
+   "anger",
+   "angry",
+   "rage"
+  ],
+  [
+   "weak",
+   "feeble",
+   "frail"
+  ],
+  [
+   "strong",
+   "tough"
+  ],
+  [
+   "cold",
+   "chilly"
+  ],
+  [
+   "hot",
+   "heat"
+  ],
+  [
+   "beautiful",
+   "pretty",
+   "lovely"
+  ]
+ ]
+}

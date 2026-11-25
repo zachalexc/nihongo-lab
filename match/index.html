@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Kanji Match · Nihongo Lab</title>
+    <meta name="theme-color" content="#121212">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Kanji Match">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icon-192.png" type="image/png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="match.css?v=1.0">
+</head>
+<body>
+<main id="app">
+
+    <!-- ================================================================ Home -->
+    <section id="home" class="screen" aria-labelledby="home-title">
+        <header class="home-head">
+            <a class="back-link" href="../">Nihongo Lab</a>
+            <h1 id="home-title">Kanji Match</h1>
+            <p class="lede">Pair each kanji with its meaning. Pairs you know clear first; the rest you work out at the end.</p>
+        </header>
+
+        <div id="home-warning" class="notice hidden" role="status"></div>
+
+        <form id="setup" class="setup" autocomplete="off">
+            <fieldset class="field">
+                <legend>Level</legend>
+                <div class="segmented" id="level-choice">
+                    <label><input type="radio" name="level" value="N5" checked><span>N5</span></label>
+                    <label><input type="radio" name="level" value="N4"><span>N4</span></label>
+                    <label><input type="radio" name="level" value="N3"><span>N3</span></label>
+                    <label><input type="radio" name="level" value="N2"><span>N2</span></label>
+                    <label><input type="radio" name="level" value="N1"><span>N1</span></label>
+                    <label><input type="radio" name="level" value="X"><span>Extras</span></label>
+                </div>
+                <label class="check"><input type="checkbox" id="include-lower"> Include lower levels</label>
+                <p class="hint hidden" id="extras-hint">Extras: 151 kanji from the N1 sheet that aren't on the usual N1 list. Most were added to the Jōyō list in 2010 (椅, 鍵, 謎, 箸).</p>
+            </fieldset>
+
+            <fieldset class="field">
+                <legend>Board size</legend>
+                <div class="segmented">
+                    <label><input type="radio" name="size" value="6"><span>6 pairs</span></label>
+                    <label><input type="radio" name="size" value="8" checked><span>8 pairs</span></label>
+                    <label><input type="radio" name="size" value="12"><span>12 pairs</span></label>
+                </div>
+            </fieldset>
+
+            <div class="start-row">
+                <button type="submit" class="btn primary" id="play-btn">Play</button>
+                <button type="button" class="btn" id="review-btn">Review</button>
+            </div>
+            <p class="hint" id="review-hint"></p>
+        </form>
+
+        <section class="progress" aria-labelledby="progress-title">
+            <h2 id="progress-title">Your progress</h2>
+            <div id="progress-bars"></div>
+            <p class="key" aria-hidden="true">
+                <span><span class="sw strong"></span>Strong</span> <span><span class="sw learning"></span>Learning</span>
+                <span><span class="sw weak"></span>Needs work</span> <span><span class="sw unseen"></span>Not seen yet</span>
+            </p>
+            <p id="progress-facts" class="facts"></p>
+            <details id="trouble" class="hidden">
+                <summary>Kanji that keep slipping (<span id="trouble-count">0</span>)</summary>
+                <div id="trouble-list" class="trouble-list"></div>
+            </details>
+        </section>
+
+        <details class="options">
+            <summary>Options and backup</summary>
+            <label class="check"><input type="checkbox" id="opt-timer" checked> Show the timer during a board</label>
+            <label class="check"><input type="checkbox" id="opt-vibrate" checked> Vibrate on a wrong pair (Android)</label>
+            <div class="backup">
+                <p id="backup-status" class="hint"></p>
+                <div class="row">
+                    <button type="button" class="btn" id="export-btn">Export progress</button>
+                    <label class="btn file-btn">Import progress<input type="file" id="import-file" accept="application/json,.json"></label>
+                    <button type="button" class="btn danger-quiet" id="reset-btn">Reset progress</button>
+                </div>
+                <div id="backup-confirm" class="confirm hidden" role="alert"></div>
+            </div>
+        </details>
+
+        <p id="ios-tip" class="notice hidden">
+            On iPhone, Safari clears a site's saved progress after 7 days without a visit. Add this page to your Home Screen (Share, then Add to Home Screen) to keep it.
+            <button type="button" class="link-btn" id="ios-tip-close">Got it</button>
+        </p>
+
+        <footer class="credits">
+            Kanji meanings and readings: KANJIDIC2 and JMdict, © Electronic Dictionary Research and Development Group, used under
+            <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>.
+            <a href="DATA_LICENSE.md">Data licence</a>
+        </footer>
+    </section>
+
+    <!-- ================================================================ Board -->
+    <section id="play" class="screen hidden" aria-label="Board">
+        <header class="bar">
+            <button type="button" class="icon-btn" id="quit-btn" aria-label="Quit this board" title="Quit (Esc)">×</button>
+            <span class="bar-title" id="bar-title"></span>
+            <span class="bar-stat" id="bar-left" aria-label="Pairs left"></span>
+            <span class="bar-stat" id="bar-misses"></span>
+            <span class="bar-stat timer" id="bar-timer"></span>
+        </header>
+        <div id="quit-bar" class="quit-bar hidden" role="alertdialog" aria-label="Quit this board?">
+            <span>Quit this board? Wrong pairs so far still count.</span>
+            <button type="button" class="btn small" id="quit-yes">Quit</button>
+            <button type="button" class="btn small primary" id="quit-no">Keep playing</button>
+        </div>
+
+        <div class="table" id="table">
+            <div class="zone kanji" id="zone-kanji" role="group" aria-label="Kanji"></div>
+            <div class="zone answers" id="zone-answers" role="group" aria-label="Meanings"></div>
+            <div class="summary hidden" id="summary" tabindex="-1"></div>
+        </div>
+
+        <aside class="learn" id="learn" aria-live="polite" aria-label="About the last kanji you matched">
+            <p class="learn-empty">Tap a kanji, then its meaning.</p>
+        </aside>
+        <p class="sr-only" id="announce" aria-live="assertive"></p>
+    </section>
+</main>
+
+<script src="match_core.js?v=1.0"></script>
+<script src="match_store.js?v=1.0"></script>
+<script src="match.js?v=1.0"></script>
+</body>
+</html>
