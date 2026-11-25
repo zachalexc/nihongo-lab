@@ -114,6 +114,7 @@ const UI = {
     tabSentences: document.getElementById('tab-sentences'),
     tabDev: document.getElementById('tab-dev'),
     tabKb1: document.getElementById('tab-kb1'),
+    tabJlpt: document.getElementById('tab-jlpt'),
     choiceBtnsContainer: document.getElementById('choice-buttons-container'),
     kb1NoneBtn: document.getElementById('kb1-none-btn'),
     kb1PractiseBtn: document.getElementById('kb1-practise-btn'),
@@ -246,9 +247,11 @@ function switchTab(category) {
         AppState.currentStudyMode = 'reading';
     } else if (category === 'kb1') {
         AppState.currentStudyMode = document.querySelector('input[name="kb1-mode"]:checked')?.value || 'kb1-reading-typed';
+    } else if (category === 'jlpt') {
+        AppState.currentStudyMode = 'jlpt-endless';
     }
 
-    const targetId = (category === 'dev' || category === 'kb1') ? `tab-${category}` : `tab-${category}s`;
+    const targetId = (category === 'dev' || category === 'kb1' || category === 'jlpt') ? `tab-${category}` : `tab-${category}s`;
 
     // Update active class on the tab buttons
     UI.tabBtns.forEach(btn => {
@@ -256,17 +259,22 @@ function switchTab(category) {
     });
 
     // Toggle visibility of content wrappers
-    [UI.tabVerbs, UI.tabAdjectives, UI.tabNouns, UI.tabSentences, UI.tabDev, UI.tabKb1].forEach(panel => {
+    [UI.tabVerbs, UI.tabAdjectives, UI.tabNouns, UI.tabSentences, UI.tabJlpt, UI.tabDev, UI.tabKb1].forEach(panel => {
         if (panel) panel.classList.toggle('hidden', panel.id !== targetId);
     });
 
     // Toggle visibility of specific settings groups for Sentences, Dev and 漢字基礎１ tabs
-    const hideCommonGroups = category === 'sentence' || category === 'dev' || category === 'kb1';
+    const hideCommonGroups = category === 'sentence' || category === 'dev' || category === 'kb1' || category === 'jlpt';
     [UI.jlptSettingsGroup, UI.subsetSettingsGroup, UI.audioSettingsGroup, UI.kanjiSettingsGroup].forEach(group => {
         if (group) group.classList.toggle('hidden', hideCommonGroups);
     });
     // Class questions read the answer aloud like the vocabulary tabs, so keep the audio options there
     if (category === 'kb1' && UI.audioSettingsGroup) UI.audioSettingsGroup.classList.remove('hidden');
+    // Endless: the shared controls move into the visible tab; the JLPT word list loads the first time its tab is shown
+    if (window.Endless) {
+        if (category === 'jlpt') window.Endless.jlptShown();
+        else if (category === 'kb1') window.Endless.attachShared('kb1');
+    }
 
     // Refresh the UI state for the selected category
     renderSubsetCheckboxes();
@@ -355,7 +363,7 @@ function renderSubsetCheckboxes() {
     if (!AppState.omniDatabase) return;
 
     // Handle Sentences, Dev and 漢字基礎１ category transition
-    if (AppState.currentCategory === 'sentence' || AppState.currentCategory === 'dev' || AppState.currentCategory === 'kb1') {
+    if (AppState.currentCategory === 'sentence' || AppState.currentCategory === 'dev' || AppState.currentCategory === 'kb1' || AppState.currentCategory === 'jlpt') {
         // UI is now handled statically by the number inputs in HTML
         return;
     }
@@ -428,7 +436,7 @@ function renderSubsetCheckboxes() {
 function getFilteredAndChunkedVocab() {
     if (!AppState.omniDatabase) return [];
 
-    if (AppState.currentCategory === 'sentence' || AppState.currentCategory === 'dev' || AppState.currentCategory === 'kb1') {
+    if (AppState.currentCategory === 'sentence' || AppState.currentCategory === 'dev' || AppState.currentCategory === 'kb1' || AppState.currentCategory === 'jlpt') {
         return [];
     }
 
@@ -476,6 +484,14 @@ function getFilteredAndChunkedVocab() {
 // Calculates the expected number of flashcards based on current settings.
 
 function updateLiveEstimator() {
+    UI.startBtn.disabled = false;
+    // --- JLPT (Endless over the public JLPT words): Start waits for the word list and a ticked level ---
+    if (AppState.currentCategory === 'jlpt') {
+        const e = window.Endless ? window.Endless.jlptEstimate() : { html: 'Loading the word list…', canStart: false };
+        UI.estimatorText.innerHTML = e.html;
+        UI.startBtn.disabled = !e.canStart;
+        return;
+    }
     // --- 漢字基礎１ CATEGORY ESTIMATOR ---
     if (AppState.currentCategory === 'kb1') {
         UI.estimatorText.innerHTML = window.KB1 ? window.KB1.estimateHtml() : 'Estimated Flashcards: <span>Locked</span>';
@@ -688,6 +704,12 @@ function initializeSession() {
     // Reset the "endless" marker a previous Flash/Listening session may have left behind
     AppState.originalTotal = 0;
 
+    // --- JLPT tab: Endless over the public JLPT words (endless.js); no class data involved ---
+    if (AppState.currentCategory === 'jlpt') {
+        const js = window.Endless ? window.Endless.jlptSource() : null;
+        if (js) window.Endless.start(js);
+        return;
+    }
     // --- 漢字基礎１ (class section): the class data is in the app's own formats, so the existing
     // modes use the shared builders; only the class-only modes come from kb1_core.js ---
     if (AppState.currentCategory === 'kb1') {
@@ -2941,7 +2963,7 @@ UI.settingsSection.addEventListener('change', (e) => {
 UI.tabBtns.forEach(btn => {
     btn.addEventListener('click', () => {
         const tabKey = btn.dataset.tab.replace('tab-', '');
-        const category = (tabKey === 'dev' || tabKey === 'kb1') ? tabKey : tabKey.slice(0, -1);
+        const category = (tabKey === 'dev' || tabKey === 'kb1' || tabKey === 'jlpt') ? tabKey : tabKey.slice(0, -1);
         switchTab(category);
     });
 });
@@ -3046,7 +3068,7 @@ async function initApp() {
             decryptEncFile, flashElementColor, updateLiveEstimator, renderMasterList, saveSettings,
             knownIds: () => Array.from(AppState.knownWords)
         });
-        // 8. Endless mode (class tab): its own progress store, opened in the background
+        // 8. Endless mode (class tab and JLPT tab): its own progress store, opened in the background
         if (window.Endless) window.Endless.init({ settingsSection: UI.settingsSection, updateLiveEstimator, flashElementColor });
     } catch (error) {
         console.error('Failed to initialize application:', error);

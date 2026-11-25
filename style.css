@@ -960,3 +960,16 @@ input[type="range"]::-moz-range-thumb {
 @media (max-width: 600px) {
     .endless-card .study-actions { flex-wrap: wrap; }
 }
+/* Endless: the shared controls block (moved between the class tab and the JLPT tab) and the JLPT tab (phase 4) */
+.kb1-endless-shared { display: flex; flex-direction: column; gap: 0.5rem; }
+#tab-jlpt .jlpt-levels { gap: 0.5rem 1rem; }
+#tab-jlpt .kb1-endless-line { overflow-wrap: anywhere; }
+.jlpt-credits { font-size: 0.72rem; }
+.jlpt-credits a { color: var(--accent-color); }
+.jlpt-all-started { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; color: var(--success-color); }
+.jlpt-all-started .btn, #endless-add-beyond-btn { padding: 0.4rem 0.8rem; font-size: 0.85rem; }
+/* Endless: several readings of one spelling (round 12) */
+#endless-prompt .endless-sib { margin-top: 0.35rem; }
+#endless-prompt .endless-sib .endless-here { display: inline; margin: 0; font-size: inherit; color: var(--text-primary); }
+.endless-hint.endless-other { color: var(--accent-color); }
+.endless-feedback .endless-also { font-size: 0.9rem; color: var(--text-secondary); margin-top: 0.4rem; }

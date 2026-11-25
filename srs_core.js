@@ -1,4 +1,5 @@
-// Endless mode: the learning engine (pure logic, no DOM, no storage). v2 "Flow".
+// Endless mode: the learning engine (pure logic, no DOM, no storage). v2 "Flow" (2.4: one-pass picker, round 10;
+// 2.5: several readings of one spelling, round 12).
 // Runs in the browser (window.SrsCore) and in Node for the tests (require('./srs_core.js')).
 //
 // It classes a typed answer (clean / slow / near miss / wrong / unknown), keeps a memory model per
@@ -75,7 +76,8 @@
     const gapConfirm = W => Math.max(TUNING.GAP_CONFIRM_MIN, W + 2);
 
     // Class codes (stored in state.recent and the log)
-    const CLS = { CLEAN: 'C', SLOW: 'S', NEAR: 'N', WRONG: 'W', TYPO: 'T', UNKNOWN: 'U', VOID: 'V' };   // V: an undone answer (log only)
+    const CLS = { CLEAN: 'C', SLOW: 'S', NEAR: 'N', WRONG: 'W', TYPO: 'T', UNKNOWN: 'U', VOID: 'V', OTHER: 'A' };
+    // V: an undone answer (log only). A: another reading of the same spelling on a Hinted item (log only, not graded).
 
     // ------------------------------------------------------------------ kana
     const toHiragana = s => String(s).replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
@@ -416,8 +418,9 @@
         }
         const out = { state: s, grade: g, R, action: null, retype: false, fastTrack: false, relearn: false, mastered: false };
 
-        if (firstSight && loop && loop.fresh) {
-            // a voided first sight coming back: the reading was already seen, so no fast-track; a pass gets the confirm
+        if (firstSight && ((loop && loop.fresh) || ctx.noFastTrack)) {
+            // a voided first sight coming back (the reading was already seen), or a first sight answered after an
+            // "other reading" (A): no fast-track; a pass gets the confirm
             s.st = 'learning';
             if (isPass(cls)) out.action = 'confirm';
             else { out.action = 'retry'; out.retype = cls === CLS.WRONG || cls === CLS.UNKNOWN; }
@@ -479,56 +482,70 @@
         return out;
     }
 
+    // key -> item, cached per items array (rebuilt if the array's length changes)
+    const keyMaps = new WeakMap();
+    function keyMap(items) {
+        let m = keyMaps.get(items);
+        if (!m || m.len !== items.length) {
+            m = new Map(items.map(it => [it.key, it])); m.len = items.length; keyMaps.set(items, m);
+        }
+        return m;
+    }
+
     // -> { item, kind: 'loop'|'fading'|'relearn'|'new'|'review'|'wait', loop: entry|null }; null only for an empty pool
+    // One pass over the pool (round 10): R is computed once per memory word, and the same pass finds the lost word with the
+    // lowest R, the fading count and the fading word to ask first, the lowest-R review word and the first new word in content
+    // order. Same picks as the round 2 picker (test_srs.js keeps it as a reference and compares them).
     function pickNext(items, states, sess, now) {
         if (!items.length) return null;
         const lastKey = sess.recentKeys[sess.recentKeys.length - 1];
         const hold = sess.hold || {};
         const ok = k => k !== lastKey && !(hold[k] > sess.n);       // held: an undone answer's word waits a few items
-        const byKey = new Map(items.map(it => [it.key, it]));
+        const byKey = keyMap(items);
         const loopKeys = new Set(sess.loop.map(e => e.key));
         const room = sess.loop.length < sess.W;
 
         // 1. a loop word whose gap has arrived
-        const ready = sess.loop.filter(e => e.at <= sess.n && ok(e.key) && byKey.has(e.key)).sort((a, b) => a.at - b.at)[0];
+        let ready = null;
+        for (const e of sess.loop) if (e.at <= sess.n && ok(e.key) && byKey.has(e.key) && (!ready || e.at < ready.at)) ready = e;
         if (ready) return { item: byKey.get(ready.key), kind: 'loop', loop: ready };
 
+        // the single pass
+        const risk = TUNING.FADING_ORDER === 'risk', LOST = TUNING.LOST, TARGET = TUNING.TARGET;
+        let lost = null, lostR = 2, fade = null, fadeR = risk ? 2 : -1, fadingN = 0, low = null, lowR = 2, fresh = null;
+        for (const it of items) {
+            const k = it.key, s = states[k];
+            if (!s) { if (!fresh && !loopKeys.has(k) && ok(k)) fresh = it; continue; }
+            if (s.st !== 'memory' || loopKeys.has(k) || !ok(k)) continue;
+            const R = recall(s, now);
+            if (R < LOST) { if (R < lostR) { lost = it; lostR = R; } continue; }
+            if (R < lowR) { low = it; lowR = R; }
+            if (R < TARGET) {
+                fadingN++;
+                if (risk ? R < fadeR : R > fadeR) { fade = it; fadeR = R; }
+            }
+        }
         // candidates for a "new" slot: lost memory words (relearned like new words) first, then new words
         const newSlot = () => {
             if (!room) return null;
-            let lost = null, lostR = 2;
-            for (const it of items) {
-                const s = states[it.key];
-                if (!s || s.st !== 'memory' || loopKeys.has(it.key) || !ok(it.key)) continue;
-                const R = recall(s, now);
-                if (R < TUNING.LOST && R < lostR) { lost = it; lostR = R; }
-            }
             if (lost) return { item: lost, kind: 'relearn', loop: null };
-            const fresh = items.find(it => !states[it.key] && !loopKeys.has(it.key) && ok(it.key));
             return fresh ? { item: fresh, kind: 'new', loop: null } : null;
         };
 
         // 2. fading words, with a new word every NEW_EVERY-th slot
-        const fading = fadingList(items, states, sess, now).filter(x => ok(x.it.key));
-        if (fading.length) {
-            const every = fading.length > TUNING.BUSY_FADING ? TUNING.NEW_EVERY_BUSY : TUNING.NEW_EVERY;
+        if (fadingN) {
+            const every = fadingN > TUNING.BUSY_FADING ? TUNING.NEW_EVERY_BUSY : TUNING.NEW_EVERY;
             if (sess.sinceNew >= every - 1) { const n = newSlot(); if (n) return n; }
-            return { item: fading[0].it, kind: 'fading', loop: null };
+            return { item: fade, kind: 'fading', loop: null };
         }
         // 3. a new word (or a lost one) if the working set has room
         const n = newSlot();
         if (n) return n;
         // 4./5. light practice: the memory word with the lowest R (lost words wait for room in the loop);
         //       else the loop word that has waited longest
-        let low = null, lowR = 2;
-        for (const it of items) {
-            const s = states[it.key];
-            if (!s || s.st !== 'memory' || loopKeys.has(it.key) || !ok(it.key)) continue;
-            const R = recall(s, now);
-            if (R >= TUNING.LOST && R < lowR) { low = it; lowR = R; }
-        }
         if (low) return { item: low, kind: 'review', loop: null };
-        const wait = sess.loop.filter(e => ok(e.key) && byKey.has(e.key)).sort((a, b) => a.at - b.at)[0];
+        let wait = null;
+        for (const e of sess.loop) if (ok(e.key) && byKey.has(e.key) && (!wait || e.at < wait.at)) wait = e;
         if (wait) return { item: byKey.get(wait.key), kind: 'wait', loop: wait };
         // anything that isn't the last item (tiny pools)
         const any = items.find(it => ok(it.key)) || items[0];
@@ -651,7 +668,7 @@
             bands[BANDS.findIndex(([lo, hi]) => s.s >= lo && s.s < hi)]++;
         }
         // T marks a typo fix and f: 'x' an answer in another mode: neither counts for accuracy or speed
-        const entries = (log || []).filter(e => keys.has(e.k) && e.c !== CLS.TYPO && e.c !== CLS.VOID && e.f !== 'x');
+        const entries = (log || []).filter(e => keys.has(e.k) && e.c !== CLS.TYPO && e.c !== CLS.VOID && e.c !== CLS.OTHER && e.f !== 'x');
         const right = entries.filter(e => e.c === CLS.CLEAN || e.c === CLS.SLOW).length;
         const graded = entries.filter(e => e.c !== CLS.UNKNOWN);
         const speeds = entries.filter(e => e.c === CLS.CLEAN && typeof e.ms === 'number' && e.m && !e.f).map(e => e.ms / e.m);
@@ -659,6 +676,52 @@
                  memory, notStarted, fading, bands, bandLabels: BANDS.map(b => b[2]),
                  answers: graded.length, accuracy: graded.length ? right / graded.length : null,
                  medianMsPerMora: median(speeds) };
+    }
+
+    // ------------------------------------------------------------------ several readings of one spelling (round 12)
+    // Siblings: items of the pool with the same spelling (different keys). A group is 'hinted' when no two of its
+    // glosses share a part (split on ';', trimmed, case-folded): the meaning tells which reading is wanted, so a
+    // sibling's reading is an "other reading" (A), not an answer. Otherwise 'either': every reading is accepted.
+    // hints: { 'spelling|reading': 'short English hint' } replaces an item's gloss for this (can make a group hinted).
+    // -> Map(key -> { kind, count, here, others: [{ key, reading, gloss, answers }] }); items without siblings are absent.
+    const glossParts = g => new Set(String(g || '').split(';').map(x => x.trim().toLowerCase()).filter(Boolean));
+    function siblings(items, hints) {
+        const byText = new Map();
+        for (const it of items) { if (!byText.has(it.text)) byText.set(it.text, []); byText.get(it.text).push(it); }
+        const out = new Map();
+        for (const g of byText.values()) {
+            if (g.length < 2) continue;
+            const here = g.map(it => (hints && hints[it.text + '|' + it.reading]) || it.gloss || '');
+            const parts = here.map(glossParts);
+            let hinted = parts.every(p => p.size > 0);
+            for (let i = 0; hinted && i < g.length; i++) for (let j = i + 1; hinted && j < g.length; j++) {
+                for (const x of parts[i]) if (parts[j].has(x)) { hinted = false; break; }
+            }
+            g.forEach((it, i) => out.set(it.key, {
+                kind: hinted ? 'hinted' : 'either', count: g.length, here: here[i],
+                others: g.filter((_, j) => j !== i).map((o, k) => ({ key: o.key, reading: o.reading, gloss: here[g.indexOf(o)], answers: o.answers.map(toHiragana) })),
+            }));
+        }
+        return out;
+    }
+    // The item as graded: Hinted -> the siblings' readings are not accepted; Either -> every sibling reading is.
+    function withSiblings(item, sib) {
+        if (!sib) return item;
+        const main = new Set(item.answers.map(toHiragana));
+        const sibR = new Set(sib.others.flatMap(o => o.answers));
+        let alt = item.altAnswers.map(toHiragana);
+        if (sib.kind === 'hinted') alt = alt.filter(a => !sibR.has(a));
+        else for (const r of sibR) if (!alt.includes(r)) alt.push(r);
+        return Object.assign({}, item, { altAnswers: alt.filter(a => !main.has(a)) });
+    }
+    // A Hinted item answered with a sibling's reading -> that sibling ({ key, reading, gloss }), else null.
+    function otherReading(item, raw, sib) {
+        if (!sib || sib.kind !== 'hinted') return null;
+        const own = expectedOf(withSiblings(item, sib));
+        const sibR = sib.others.flatMap(o => o.answers);
+        const { kana } = normalize(raw, own.concat(sibR));
+        if (!kana || own.includes(kana)) return null;
+        return sib.others.find(o => o.answers.includes(kana)) || null;
     }
 
     // ------------------------------------------------------------------ errors that teach
@@ -683,5 +746,6 @@
         forgettingCurve, fsrsInit, fsrsStep, fsrsNext, recall, gradeFor,
         newState, checkMastered, applyAnswer, applyExternal, newSession, inLoop, fadingList, pickNext, placeLoop, recordAnswer,
         paceCounts, updatePace, canTypo, applyTypo, unfinishedInput, undoEligible, canUndo, cloneSession, holdAfterVoid, goodStop, recallNow, progress, confusedWith,
+        siblings, withSiblings, otherReading,
     };
 }));

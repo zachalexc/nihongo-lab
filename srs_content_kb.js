@@ -1,4 +1,4 @@
-// Endless mode: content adapter for the class words (Kanji Basic 1 + 2).
+// Endless mode: content adapter for the class words (Kanji Basic 1 + 2). 1.1: same-Step siblings kept together.
 // Turns the class words chosen by KB1Core.selectWords() (from the decrypted kb1 bundle, in
 // memory only) into engine items. Later srs_content_jlpt.js does the same for the JLPT lists.
 //
@@ -24,6 +24,11 @@
         for (const x of indexed) (hasKanji(x.w.base.kanji) ? kept : dropped).push(x);
         kept.sort((a, b) => (a.w.kb1.steps[0] - b.w.kb1.steps[0]) ||
                             ((b.w.kb1.in_class ? 1 : 0) - (a.w.kb1.in_class ? 1 : 0)) || (a.i - b.i));
+        // Siblings (same spelling, other reading) in the same Step stay together, at the place of the first of them,
+        // so the second is introduced at the next new-word slot (round 12).
+        const firstAt = new Map();
+        kept.forEach((x, pos) => { const g = x.w.kb1.steps[0] + '|' + x.w.base.kanji; if (!firstAt.has(g)) firstAt.set(g, pos); x.pos = pos; });
+        kept.sort((a, b) => (firstAt.get(a.w.kb1.steps[0] + '|' + a.w.base.kanji) - firstAt.get(b.w.kb1.steps[0] + '|' + b.w.base.kanji)) || (a.pos - b.pos));
         // Same spelling, other reading (homographs): every reading in the group is accepted.
         const byText = new Map();
         for (const { w } of kept) {

@@ -5,26 +5,33 @@
 // - Cross-origin requests and non-GET requests are passed through untouched (never cached).
 // - Nothing under match/ (Kanji Match is a separate project).
 // - The Firebase SDK (vendor/firebase/) is not precached: it is cached on first use (signed-in users only).
+// - The JLPT word data (jlpt_words.json, jlpt_beyond.json) is not precached either (its adapter srs_content_jlpt.js is): it lives in its own cache
+//   DATA_CACHE, which shell-cache cleanup never touches. Cache first for the exact URL including ?v= (a file
+//   never changes under one ?v=); network on a miss; storing a new ?v= deletes the older ones of that file.
+//   A data ?v= change needs no CACHE_VERSION bump.
 // Bump CACHE_VERSION whenever a precached file's ?v= changes (test_srs.js checks the list against index.html).
 'use strict';
 
-const CACHE_VERSION = 5;
+const CACHE_VERSION = 9;
 const CACHE = 'nl-shell-' + CACHE_VERSION;
+const DATA_CACHE = 'nl-data';
+const DATA_PATH = /\/jlpt_(words|beyond)\.json$/;
 const PRECACHE = [
     './',
     'index.html',
-    'style.css?v=1.17',
+    'style.css?v=1.19',
     'vendor/wanakana.min.js?v=5.3.1',
     'kb1_core.js?v=1.14',
     'kb1.js?v=1.9',
-    'srs_core.js?v=2.3',
-    'srs_content_kb.js?v=1.0',
+    'srs_core.js?v=2.5',
+    'srs_content_kb.js?v=1.1',
+    'srs_content_jlpt.js?v=1.1',
     'srs_store.js?v=2.2',
     'srs_sync.js?v=1.0',
     'firebase_config.js?v=1.1',
     'cloud_firebase.js?v=1.0',
-    'endless.js?v=2.5',
-    'app.js?v=1.15',
+    'endless.js?v=2.8',
+    'app.js?v=1.16',
     'manifest.webmanifest?v=1.0',
     'icons/icon-192.png',
     'icons/icon-512.png',
@@ -51,6 +58,7 @@ self.addEventListener('fetch', event => {
     const url = new URL(req.url);
     if (url.origin !== self.location.origin) return;
     if (url.pathname.includes('/match/')) return;
+    if (DATA_PATH.test(url.pathname)) { event.respondWith(dataResponse(req, url)); return; }
     event.respondWith(fetch(req).then(res => {
         if (res && res.ok && res.type === 'basic') {
             const copy = res.clone();
@@ -63,3 +71,19 @@ self.addEventListener('fetch', event => {
         return Response.error();
     })));
 });
+
+// JLPT word data: cache first per exact URL (with ?v=), then the network; a stored new version replaces the old ones.
+async function dataResponse(req, url) {
+    const cache = await caches.open(DATA_CACHE);
+    const hit = await cache.match(req);
+    if (hit) return hit;
+    const res = await fetch(req);
+    if (res && res.ok && res.type === 'basic') {
+        await cache.put(req, res.clone());
+        for (const old of await cache.keys()) {
+            const u = new URL(old.url);
+            if (u.pathname === url.pathname && old.url !== req.url) await cache.delete(old);
+        }
+    }
+    return res;
+}

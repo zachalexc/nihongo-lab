@@ -1,13 +1,20 @@
-// Endless mode (class tab), v2 "Flow": word → reading for as long as you like. New words keep coming
+// Endless mode, v2 "Flow": word → reading for as long as you like. New words keep coming
 // while you're doing well, a miss comes back a few words later (retype, then one confirm), and a
 // memory model (FSRS-6) decides which word is most useful next. srs_core.js is the engine,
-// srs_store.js saves progress on this device (IndexedDB) and srs_content_kb.js turns the class
-// words into items. Class words come from the decrypted kb1 bundle via KB1.endlessSource() and
-// stay in memory.
+// srs_store.js saves progress on this device (IndexedDB). Two sources share one store (and one sync):
+// - the class tab ('kb'): srs_content_kb.js turns the class words from the decrypted kb1 bundle
+//   (KB1.endlessSource()) into items; they stay in memory;
+// - the public JLPT tab ('jlpt', phase 4): srs_content_jlpt.js loads the JLPT word lists lazily. A JLPT
+//   session never calls KB1 or KB1Core: no prompt furigana, no kanji hover cards (the reading line after
+//   an answer shows the item's own furigana split).
+// The shared controls (Export/Import/Reset, cloud sync, notes, tips) are one block, moved into the visible
+// tab by attachShared().
+// Several readings of one spelling (round 12): siblings in the pool (SrsCore.siblings). On a Hinted item the prompt
+// says which meaning is wanted and a sibling's reading is an "other reading" (A): not graded, asked again.
 window.Endless = (function () {
     'use strict';
 
-    const Core = window.SrsCore, Store = window.SrsStore, Content = window.SrsContentKB;
+    const Core = window.SrsCore, Store = window.SrsStore, Content = window.SrsContentKB, ContentJ = window.SrsContentJLPT;
     const Sync = window.SrsSync, Cloud = window.NLCloud;
     const $ = id => document.getElementById(id);
     const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -19,6 +26,12 @@ window.Endless = (function () {
     let warnings = [];
     // session
     let items = [], classKanji = null, hoverMap = new Map(), sess = null, pick = null, last = null, phase = 'idle';
+    let srcKind = 'kb';                        // the running session's source: 'kb' (class) | 'jlpt'
+    let sibMap = new Map();                    // the pool's siblings (same spelling, other reading)
+    let promptA = 0;                           // "other reading" answers on the current prompt
+    // Optional hints ('spelling|reading' -> short English text) that replace a gloss for telling siblings apart.
+    // Public words only (never a class-only word).
+    const SIBLING_HINTS = {};
     let t0 = 0, paused = false, statsOpen = false, sum = null;
     let shownAt = 0;                           // when the prompt (or the retype box) appeared: the Enter guard
     let missFeedback = false;                  // the feedback screen after a miss is guarded too (the reading must be seen)
@@ -81,8 +94,8 @@ window.Endless = (function () {
         $('endless-export-btn').addEventListener('click', exportFile);
         $('endless-import-btn').addEventListener('click', () => {
             if (!confirm(meta && meta.uid
-                ? 'Import a backup? It replaces your Endless progress on this device, in the cloud and on your other devices.'
-                : 'Import a backup? It replaces the Endless progress saved on this device.')) return;
+                ? 'Import a backup? It replaces all Endless progress (class and JLPT) on this device, in the cloud and on your other devices.'
+                : 'Import a backup? It replaces all Endless progress (class and JLPT) saved on this device.')) return;
             $('endless-import-file').value = '';
             $('endless-import-file').click();
         });
@@ -92,6 +105,7 @@ window.Endless = (function () {
         $('endless-signout-btn').addEventListener('click', () => signOut(''));
         $('endless-delete-cloud-btn').addEventListener('click', deleteCloudData);
         storeReady.then(() => { renderCloud(); if (rememberedSignIn()) startCloud(false); });
+        initJlpt();
 
         const input = $('endless-input');
         if (window.wanakana) window.wanakana.bind(input, { IMEMode: true });
@@ -157,7 +171,11 @@ window.Endless = (function () {
         for (const ev of q) { try { await writeExternal(ev); } catch (e) { console.warn('Endless: external save failed', e); } }
     }
     const elapsed = () => Math.round(performance.now() - t0);
-    const retypeOn = () => !$('kb1-retype') || $('kb1-retype').checked;
+    const retypeOn = () => {
+        const box = $(srcKind === 'jlpt' ? 'jlpt-retype' : 'kb1-retype');
+        return !box || box.checked;
+    };
+    const kindOf = src => (src && src.kind === 'jlpt' ? 'jlpt' : 'kb');
 
     function renderWarnings() {
         const el = $('kb1-endless-warn');
@@ -165,11 +183,19 @@ window.Endless = (function () {
     }
 
     // ---------------------------------------------------------------- settings screen
-    function poolItems(src) { return src ? Content.itemsFromWords(src.words).items : []; }
+    // kb: the class words; jlpt: the loaded JLPT items of the ticked levels (+ the beyond words when on)
+    function poolItems(src) {
+        if (!src) return [];
+        if (kindOf(src) === 'jlpt') {
+            const lv = new Set(src.levels || []);
+            return src.items.filter(it => (it.level ? lv.has(it.level) : !!src.beyond));
+        }
+        return Content.itemsFromWords(src.words).items;
+    }
 
-    // Estimator text; "…" until the store has loaded (never blocks).
+    // Estimator text; "…" until the store has loaded (never blocks). The numbers count this tab's pool only.
     function estimateHtml(src) {
-        const el = $('kb1-endless-summary');
+        const el = $(kindOf(src) === 'jlpt' ? 'jlpt-endless-summary' : 'kb1-endless-summary');
         if (!meta || !src) {
             if (el) el.textContent = '';
             return 'Recall now: <span>…</span> · Long-term: <span>…</span> · Fading: <span>…</span>';
@@ -187,10 +213,15 @@ window.Endless = (function () {
             try { await storeReady; } catch (_) { /* reported in warnings */ }
             if (!meta) { alert('Endless progress could not be loaded on this device.'); return; }
         }
-        items = poolItems(src);
-        if (!items.length) { alert('No words for the chosen Steps.'); return; }
-        hoverMap = KB1Core.classKanji(src.kanjiAll, src.steps);      // same Steps as the pool
-        classKanji = src.furigana === false ? null : hoverMap;
+        const kind = kindOf(src);
+        const pool = poolItems(src);
+        if (!pool.length) { alert(kind === 'jlpt' ? 'No words for the chosen levels.' : 'No words for the chosen Steps.'); return; }
+        items = pool; srcKind = kind;
+        sibMap = Core.siblings(pool, SIBLING_HINTS);
+        if (kind === 'kb') {
+            hoverMap = KB1Core.classKanji(src.kanjiAll, src.steps);  // same Steps as the pool
+            classKanji = src.furigana === false ? null : hoverMap;
+        } else { hoverMap = new Map(); classKanji = null; }        // JLPT: no class data at all
         if (!meta.persistAsked && navigator.storage && navigator.storage.persist) {
             meta.persistAsked = true;
             store.saveMeta({ persistAsked: true });
@@ -215,8 +246,14 @@ window.Endless = (function () {
         pick = Core.pickNext(items, states, sess, now);
         if (!pick) { endSession(); return; }
         const it = pick.item;
+        const word = srcKind === 'kb' ? KB1Core.wordRubyHtml(it.src, classKanji) : esc(it.text);   // JLPT: the spelling only
+        const sib = sibMap.get(it.key) || null;
+        pick.sib = sib; pick.gi = Core.withSiblings(it, sib);           // the item as graded (accepted readings)
+        promptA = 0;
+        const sibLine = !sib ? '' : `<div class="kb1-instruction endless-sib">${sib.count} readings` +
+            (sib.kind === 'hinted' ? ` · here: <span class="endless-here">${esc(sib.here)}</span>` : '') + '</div>';
         $('endless-prompt').innerHTML =
-            `<div class="kb1-word" lang="ja">${KB1Core.wordRubyHtml(it.src, classKanji)}</div>` +
+            `<div class="kb1-word${srcKind === 'jlpt' ? ' endless-word' : ''}" lang="ja">${word}</div>` + sibLine +
             `<div class="kb1-instruction">Type the reading (hiragana or katakana)</div>`;
         $('endless-kind').textContent = KIND_TAG[pick.kind] || '';
         $('endless-feedback').innerHTML = '';
@@ -261,12 +298,35 @@ window.Endless = (function () {
         answer('', elapsed(), paused);
     }
 
+    // A Hinted item answered with a sibling's reading: not graded; say so and ask again on the same prompt
+    function otherReadingAsk(it, o, sib) {
+        promptA++;
+        const now = Date.now();
+        const entry = { k: it.key, t: now, c: Core.CLS.OTHER, alt: o.key };
+        log.push(entry); while (log.length > Store.LOG_KEEP) log.shift();
+        store.saveAnswer({ key: null, logEntry: entry }).catch(e => console.warn('Endless: save failed', e));
+        hint(`Yes, ${it.text} can be read ${o.reading} (${o.gloss}). Here it means "${sib.here}". Which reading fits?`);
+        $('endless-hint').classList.add('endless-other');
+        $('endless-undo-btn').classList.add('hidden');
+        const input = $('endless-input'); input.value = ''; input.focus();
+        t0 = performance.now(); shownAt = t0; paused = true;            // the timer restarts, marked paused; guarded again
+    }
+
     async function answer(raw, ms, wasPaused) {
         const now = Date.now();
         const it = pick.item;
+        const sib = pick.sib || null, gi = pick.gi || it;
+        let forceWrong = false;
+        if (raw && sib) {
+            const o = Core.otherReading(it, raw, sib);
+            if (o) { if (promptA === 0) { otherReadingAsk(it, o, sib); return; } forceWrong = true; }   // a second A -> W
+        }
         const prevState = states[it.key] || null;
-        const res = Core.classify(it, raw, { ms, paused: wasPaused, baseline: Core.baselineOf(meta.baseline), firstSight: !prevState });
+        const res = Core.classify(gi, raw, { ms, paused: wasPaused, baseline: Core.baselineOf(meta.baseline), firstSight: !prevState });
+        if (forceWrong) { res.cls = Core.CLS.WRONG; res.matched = null; }
+        else if (promptA > 0 && (res.cls === Core.CLS.CLEAN || res.cls === Core.CLS.SLOW)) res.cls = Core.CLS.SLOW;   // right after an A: Hard
         const actx = { ratio: res.ratio, loop: pick.loop ? { need: pick.loop.need, fresh: !!pick.loop.fresh } : null };
+        if (promptA > 0) actx.noFastTrack = true;
         const r = Core.applyAnswer(prevState, res.cls, now, actx);
         // snapshots for "Undo": everything this answer changes
         const sessBefore = Core.cloneSession(sess), metaBefore = JSON.parse(JSON.stringify(meta));
@@ -289,7 +349,8 @@ window.Endless = (function () {
         Object.assign(patch, cloudPatch);
         Object.assign(meta, patch);
         // errors that teach
-        const conf = (res.cls === 'W' || res.cls === 'N') ? Core.confusedWith(it, res.kana, items) : null;
+        let conf = (res.cls === 'W' || res.cls === 'N') ? Core.confusedWith(it, res.kana, items) : null;
+        if (conf && sib && sib.others.some(o => o.key === conf.key)) conf = null;     // siblings get "Also read" instead
         const entry = { k: it.key, t: now, c: res.cls, r: res.ratio === null ? null : Math.round(res.ratio * 100) / 100,
                         ms, m: res.mora, d: Core.localDay(now), g: r.grade, R: Math.round(r.R * 1e4) / 1e4 };
         if (res.paused || res.distracted) entry.f = res.distracted ? 'd' : 'p';
@@ -302,7 +363,8 @@ window.Endless = (function () {
         if (res.cls !== 'U') { sum.graded++; if (right) sum.right++; }
         if (!prevState) sum.fresh++;
         if ((!prevState || prevState.s < Core.TUNING.LONG_TERM_S) && r.state.s >= Core.TUNING.LONG_TERM_S) sum.longTerm.add(it.key);
-        showFeedback(it, res, r, conf);
+        $('endless-hint').classList.remove('endless-other');
+        showFeedback(it, res, r, conf, sib);
         const mine = last;
         mine.savePromise = store.saveAnswer({ key: it.key, state: r.state, logEntry: entry, metaPatch: patch });
         try { mine.logId = await mine.savePromise; }
@@ -315,7 +377,7 @@ window.Endless = (function () {
     // word's state, meta, the session and the log; the word comes back after at least GAP_MISS items.
     async function undo() {
         if (!Core.canUndo(meta, last)) return;
-        if (!(phase === 'feedback' || phase === 'retype' || (phase === 'question' && last.answeredAt === sess.n))) return;
+        if (!(phase === 'feedback' || phase === 'retype' || (phase === 'question' && last.answeredAt === sess.n && promptA === 0))) return;
         const u = last;
         u.undone = true;
         const onPrompt = phase === 'question';
@@ -371,20 +433,27 @@ window.Endless = (function () {
 
     const CLASS_TEXT = { C: 'Correct', S: 'Correct — slow', N: 'Near miss — looks like a typo', W: 'Not quite', U: 'New word', T: 'Counted as a typo' };
 
-    function showFeedback(it, res, r, conf) {
+    function showFeedback(it, res, r, conf, sib) {
         const ok = res.cls === 'C' || res.cls === 'S';
         const input = $('endless-input');
         $('endless-show-btn').classList.add('hidden');
-        const alt = it.altAnswers.length ? ` <span class="kb1-meaning">(also ${it.altAnswers.map(esc).join('・')})</span>` : '';
+        // other readings of the same spelling are listed with their meanings ("Also read"), not in "(also …)"
+        const sibR = new Set(sib ? sib.others.flatMap(o => o.answers) : []);
+        const alts = it.altAnswers.filter(a => !sibR.has(Core.toHiragana(a)));
+        const alt = alts.length ? ` <span class="kb1-meaning">(also ${alts.map(esc).join('・')})</span>` : '';
+        const also = sib ? `<div class="endless-also">Also read: ` + sib.others.map(o =>
+            `<span lang="ja">${esc(o.reading)}</span> (${esc(o.gloss)})`).join(' · ') + '</div>' : '';
         const yours = (ok || res.cls === 'U') ? '' : `<div class="kb1-yours"><span lang="en">Your answer:</span> <span lang="ja">${esc(res.kana || input.value)}</span></div>`;
-        let head = `<span class="${ok ? 'kb1-ok' : 'kb1-ng'}">${ok ? '✓' : res.cls === 'U' ? '•' : '✗'}</span> ${esc(CLASS_TEXT[res.cls])}`;
+        const label = res.cls === 'S' && promptA > 0 ? 'Correct — on the second try' : CLASS_TEXT[res.cls];   // after an other reading (A): still S
+        let head = `<span class="${ok ? 'kb1-ok' : 'kb1-ng'}">${ok ? '✓' : res.cls === 'U' ? '•' : '✗'}</span> ${esc(label)}`;
         if (r.fastTrack) head += ' · <span class="endless-known">Known already ✓</span>';
         if (r.mastered) head += ' · 🎓 mastered';
         $('endless-feedback').innerHTML =
             `<div class="kb1-feedback endless-class endless-${res.cls}">${head}</div>` + yours +
             `<div class="kb1-answer endless-answer">${readingHtml(it)} <span class="endless-eq">=</span> <span lang="ja">${esc(it.reading)}</span>${alt} · ${esc(it.gloss)}</div>` +
+            also +
             (conf ? `<div class="endless-conf">That's the reading of <span lang="ja">${esc(conf.text)}</span> (<span lang="ja">${esc(conf.reading)}</span>).</div>` : '');
-        if (!ok && res.cls !== 'U') {
+        if (!ok && res.cls !== 'U' && srcKind === 'kb') {
             // the kanji hover cards (as in the class word → reading mode), same Steps as the furigana
             const w = $('endless-prompt').querySelector('.kb1-word');
             if (w && KB1Core.wordHoverHtml) w.innerHTML = KB1Core.wordHoverHtml(it.src, hoverMap, !!classKanji);
@@ -420,7 +489,7 @@ window.Endless = (function () {
     function checkRetype() {
         const input = $('endless-input');
         if (!input.value.trim()) return;
-        const it = pick.item;
+        const it = pick.gi || pick.item;                              // a Hinted item's siblings don't count here either
         const exp = [...it.answers, ...it.altAnswers].map(Core.toHiragana);
         const { kana } = Core.normalize(input.value, exp);
         if (exp.includes(kana)) { input.oninput = null; next(); return; }
@@ -467,7 +536,12 @@ window.Endless = (function () {
         const endRecall = Math.round(Core.recallNow(items, states, now));
         $('endless-prompt').innerHTML = `<div class="endless-summary"><div class="kb1-instruction">Session finished</div>` +
             `<div id="endless-summary-line">+${s.fresh} new words · ${s.longTerm.size} now long-term · recall now ${Math.round(s.startRecall)} → ${endRecall} · accuracy ${acc}</div>` +
-            `<div class="endless-statline">${s.answers} answers</div></div>`;
+            `<div class="endless-statline">${s.answers} answers</div>` +
+            (srcKind === 'jlpt' && jlptAllStarted() ? `<div class="endless-statline" id="endless-all-started">All JLPT words are started. ` +
+                `<button type="button" id="endless-add-beyond-btn" class="btn btn-secondary">Add words beyond JLPT</button></div>` : '') +
+            `</div>`;
+        const addBtn = $('endless-add-beyond-btn');
+        if (addBtn) addBtn.addEventListener('click', addBeyondAndContinue);
         $('endless-feedback').innerHTML = '';
         $('endless-kind').textContent = '';
         $('endless-stop').classList.add('hidden');
@@ -494,10 +568,14 @@ window.Endless = (function () {
     }
 
     // ---------------------------------------------------------------- stats
+    // by tag prefix: kb:stepN -> "Step N"; jlpt:nN -> "NN" (N5 first); jlpt:beyond -> "Beyond JLPT"
+    const tagLabel = t => (t.startsWith('kb:step') ? 'Step ' + t.slice(7) : t === 'jlpt:beyond' ? 'Beyond JLPT' : t.startsWith('jlpt:n') ? 'N' + t.slice(6) : t);
+    const tagRank = t => (t.startsWith('kb:step') ? parseInt(t.slice(7), 10) : t === 'jlpt:beyond' ? 100 : t.startsWith('jlpt:n') ? 10 - parseInt(t.slice(6), 10) : 1000);
     function fillStatsFilter() {
         const sel = $('endless-stats-filter');
-        const tags = [...new Set(items.flatMap(it => it.tags))].sort((a, b) => parseInt(a.slice(7), 10) - parseInt(b.slice(7), 10));
-        sel.innerHTML = '<option value="">All Steps</option>' + tags.map(t => `<option value="${esc(t)}">Step ${esc(t.slice(7))}</option>`).join('');
+        const tags = [...new Set(items.flatMap(it => it.tags))].sort((a, b) => tagRank(a) - tagRank(b));
+        sel.innerHTML = `<option value="">${srcKind === 'jlpt' ? 'All levels' : 'All Steps'}</option>` +
+            tags.map(t => `<option value="${esc(t)}">${esc(tagLabel(t))}</option>`).join('');
     }
     function toggleStats() {
         statsOpen = !statsOpen;
@@ -558,8 +636,8 @@ window.Endless = (function () {
         if (!store) return;
         const synced = !!(meta && meta.uid);
         if (!confirm(synced
-            ? 'Reset all Endless progress on this device and in the cloud (your other devices too)? This cannot be undone. Use Export first if you might want it back.'
-            : 'Reset all Endless progress on this device? This cannot be undone. Use Export first if you might want it back.')) return;
+            ? 'Reset all Endless progress (class and JLPT) on this device and in the cloud (your other devices too)? This cannot be undone. Use Export first if you might want it back.'
+            : 'Reset all Endless progress (class and JLPT) on this device? This cannot be undone. Use Export first if you might want it back.')) return;
         await waitIdle();
         const keep = cloudFields();
         await store.reset();
@@ -576,6 +654,133 @@ window.Endless = (function () {
     }
     function setNote(text) { const el = $('kb1-endless-note'); if (el) el.textContent = text; }
 
+
+    // ---------------------------------------------------------------- shared controls
+    // One #endless-shared block (Export/Import/Reset, cloud line, note, warnings, iOS tip, Install), moved into the
+    // visible tab's host, so every id exists once in the document.
+    function attachShared(which) {
+        const block = $('endless-shared'), host = $(which === 'jlpt' ? 'jlpt-shared-host' : 'kb1-endless-shared-host');
+        if (block && host && block.parentNode !== host) host.appendChild(block);
+    }
+
+    // ---------------------------------------------------------------- JLPT tab (phase 4)
+    // The word list loads the first time the tab is shown; the beyond list only on opt-in. Nothing here reads class data.
+    const jlpt = { status: 'idle', words: null, err: null, beyond: null, beyondStatus: 'idle', beyondErr: null, all: null };
+    const LEVELS = [5, 4, 3, 2, 1];
+    const OFFLINE_MSG = 'The JLPT word list hasn\'t been downloaded yet. Connect to the internet once; after that it works offline.';
+    const jlptLevels = () => LEVELS.filter(l => $('jlpt-lv-' + l) && $('jlpt-lv-' + l).checked);
+    const jlptBeyondOn = () => !!($('jlpt-beyond') && $('jlpt-beyond').checked);
+
+    function initJlpt() {
+        if (!$('tab-jlpt')) return;
+        const info = ContentJ && ContentJ.BEYOND_INFO;
+        if (info && $('jlpt-beyond-label')) {
+            $('jlpt-beyond-label').textContent = `Beyond JLPT: about ${(Math.round(info.words / 100) * 100).toLocaleString('en-US')} more common words (~${info.gzipKB} KB download)`;
+        }
+        $('jlpt-retry-btn').addEventListener('click', () => {
+            if (jlpt.status !== 'ready') loadJlpt(); else if (jlptBeyondOn()) loadBeyond();
+        });
+        $('jlpt-beyond').addEventListener('change', () => { if (jlptBeyondOn() && jlpt.status === 'ready') loadBeyond(); renderJlpt(); });
+        $('jlpt-add-beyond-btn').addEventListener('click', () => setBeyond(true));
+    }
+    // app.js calls this when the JLPT tab is shown
+    function jlptShown() {
+        attachShared('jlpt');
+        if (jlpt.status === 'idle') loadJlpt();
+        else if (jlpt.status === 'ready' && jlptBeyondOn() && !jlpt.beyond && jlpt.beyondStatus !== 'loading') loadBeyond();
+        renderJlpt();
+    }
+    async function loadJlpt() {
+        if (jlpt.status === 'loading') return;
+        jlpt.status = 'loading'; jlpt.err = null; renderJlpt(); refresh();
+        try {
+            if (!ContentJ) throw Object.assign(new Error('no adapter'), { bad: true });
+            jlpt.words = await ContentJ.loadFile('words');
+            jlpt.status = 'ready'; jlpt.all = null;
+        } catch (e) {
+            console.warn('Endless: JLPT word list failed', e);
+            jlpt.status = 'failed'; jlpt.err = e && e.bad ? 'bad' : 'offline';
+        }
+        renderJlpt(); refresh();
+        if (jlpt.status === 'ready' && jlptBeyondOn()) loadBeyond();
+    }
+    async function loadBeyond() {
+        if (jlpt.beyond || jlpt.beyondStatus === 'loading') return !!jlpt.beyond;
+        jlpt.beyondStatus = 'loading'; jlpt.beyondErr = null; renderJlpt(); refresh();
+        try { jlpt.beyond = await ContentJ.loadFile('beyond'); jlpt.beyondStatus = 'ready'; jlpt.all = null; }
+        catch (e) { console.warn('Endless: beyond list failed', e); jlpt.beyondStatus = 'failed'; jlpt.beyondErr = e && e.bad ? 'bad' : 'offline'; }
+        renderJlpt(); refresh();
+        return !!jlpt.beyond;
+    }
+    // background prefetch when few N5–N1 words are left (never switches Beyond on)
+    function prefetchBeyond() {
+        if (jlpt.beyond || jlpt.beyondStatus !== 'idle' || !ContentJ || (typeof navigator !== 'undefined' && navigator.onLine === false)) return;
+        jlpt.beyondStatus = 'prefetch';
+        ContentJ.loadFile('beyond').then(b => { jlpt.beyond = b; jlpt.all = null; jlpt.beyondStatus = 'ready'; renderJlpt(); },
+                                         () => { jlpt.beyondStatus = 'idle'; });
+    }
+    function refresh() { if (ctx && phase === 'idle') ctx.updateLiveEstimator(); }
+    // ticking Beyond goes through a change event, so app.js saves the setting like any other tick-box
+    function setBeyond(on) {
+        const cb = $('jlpt-beyond');
+        if (!cb || cb.checked === on) { if (on) loadBeyond(); return; }
+        cb.checked = on;
+        cb.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    async function addBeyondAndContinue() {
+        setBeyond(true);
+        const ok = await loadBeyond();
+        if (!ok) { alert(OFFLINE_MSG.replace('JLPT word list', 'beyond-JLPT word list')); return; }
+        const src = jlptSource();
+        if (src) { $('endless-section').classList.add('hidden'); phase = 'idle'; start(src); }
+    }
+    // The JLPT pool's source, or null when the list isn't loaded or no level is ticked
+    function jlptSource() {
+        if (jlpt.status !== 'ready') return null;
+        const levels = jlptLevels();
+        if (!levels.length) return null;
+        const beyond = jlptBeyondOn() && !!jlpt.beyond;
+        if (beyond && !jlpt.all) jlpt.all = jlpt.words.concat(jlpt.beyond);
+        return { kind: 'jlpt', items: beyond ? jlpt.all : jlpt.words, levels, beyond };
+    }
+    // N1 ticked, Beyond off and every N5–N1 word of the ticked levels started
+    function jlptAllStarted() {
+        if (jlpt.status !== 'ready' || !meta || jlptBeyondOn()) return false;
+        const levels = jlptLevels();
+        if (!levels.includes(1)) return false;
+        const p = Core.progress(poolItems({ kind: 'jlpt', items: jlpt.words, levels, beyond: false }), states, [], Date.now());
+        if (p.notStarted < 50) prefetchBeyond();
+        return p.notStarted === 0;
+    }
+    function renderJlpt() {
+        const msg = $('jlpt-load-msg'); if (!msg) return;
+        let text = '', retry = false;
+        if (jlpt.status === 'idle' || jlpt.status === 'loading') text = 'Loading the word list…';
+        else if (jlpt.status === 'failed') { text = jlpt.err === 'bad' ? 'The JLPT word list couldn\'t be read. Try again later.' : OFFLINE_MSG; retry = true; }
+        else if (jlptBeyondOn() && jlpt.beyondStatus === 'loading') text = 'Loading the words beyond JLPT…';
+        else if (jlptBeyondOn() && jlpt.beyondStatus === 'failed') {
+            text = jlpt.beyondErr === 'bad' ? 'The beyond-JLPT word list couldn\'t be read. Try again later.' : OFFLINE_MSG.replace('JLPT word list', 'beyond-JLPT word list');
+            retry = true;
+        }
+        msg.textContent = text;
+        msg.classList.toggle('hidden', !text);
+        $('jlpt-retry-btn').classList.toggle('hidden', !retry);
+        $('jlpt-all-started').classList.toggle('hidden', !jlptAllStarted());
+    }
+    // app.js: the estimator line and whether Start is enabled on the JLPT tab
+    function jlptEstimate() {
+        renderJlpt();
+        if (jlpt.status !== 'ready') {
+            if ($('jlpt-endless-summary')) $('jlpt-endless-summary').textContent = '';
+            return { html: jlpt.status === 'failed' ? 'Word list: <span>not downloaded</span>' : 'Loading the word list…', canStart: false };
+        }
+        const src = jlptSource();
+        if (!src) {
+            if ($('jlpt-endless-summary')) $('jlpt-endless-summary').textContent = '';
+            return { html: 'Tick at least one level', canStart: false };
+        }
+        return { html: estimateHtml(src), canStart: true };
+    }
 
     // ---------------------------------------------------------------- cloud sync (phase 3)
     // Signed out, nothing here runs apart from renderCloud(): no SDK file is requested until Sign in is tapped
@@ -812,13 +1017,14 @@ window.Endless = (function () {
     }
 
     // For tests
-    function _state() { return { meta, states, log, sess, pick, phase, items: items.length, backend: store && store.backend.kind, warnings, shownAt, paused, last: last && { cls: last.cls, kana: last.kana, answeredAt: last.answeredAt },
+    function _state() { return { kind: srcKind, promptA, sib: pick && pick.sib ? { kind: pick.sib.kind, count: pick.sib.count, here: pick.sib.here } : null, jlpt: { status: jlpt.status, words: jlpt.words ? jlpt.words.length : 0, beyond: jlpt.beyond ? jlpt.beyond.length : 0, beyondStatus: jlpt.beyondStatus },
+                              meta, states, log, sess, pick, phase, items: items.length, backend: store && store.backend.kind, warnings, shownAt, paused, last: last && { cls: last.cls, kana: last.kana, answeredAt: last.answeredAt },
                               cloud: { user: cloud.user, status: cloud.status, lastSyncAt: cloud.lastSyncAt, answersSinceSync: cloud.answersSinceSync,
                                        pausedUntil: cloud.pausedUntil, failed: cloud.failed, note: cloud.note, syncs: cloud.syncs } }; }
     async function _seed(newStates) {          // tests: replace the stored states
         for (const [k, s] of Object.entries(newStates)) { states[k] = s; await store.saveAnswer({ key: k, state: s }); }
     }
 
-    return { init, start, estimateHtml, recordExternal, _state, _seed, ready: () => storeReady,
+    return { init, start, estimateHtml, recordExternal, attachShared, jlptShown, jlptSource, jlptEstimate, _state, _seed, ready: () => storeReady,
              _queue: () => externalQueue.length, _sync: reason => (reason ? doSync(reason) : waitIdle()), _maybeSync: maybeSync, _cloud: () => cloud };
 })();

@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Japanese Study App</title>
-    <link rel="stylesheet" href="style.css?v=1.17">
+    <link rel="stylesheet" href="style.css?v=1.19">
     <link rel="manifest" href="manifest.webmanifest?v=1.0">
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
     <meta name="theme-color" content="#121212">
@@ -152,6 +152,7 @@
                 <button type="button" class="tab-btn" data-tab="tab-adjectives">Adjectives</button>
                 <button type="button" class="tab-btn" data-tab="tab-nouns">Nouns</button>
                 <button type="button" class="tab-btn" data-tab="tab-sentences">Sentences</button>
+                <button type="button" class="tab-btn" data-tab="tab-jlpt">JLPT</button>
                 <button type="button" class="tab-btn" data-tab="tab-dev">Dev</button>
                 <button type="button" class="tab-btn" data-tab="tab-kb1" lang="ja">漢字基礎１</button>
             </div>
@@ -492,6 +493,61 @@
                 </div>
             </div>
 
+            <div id="tab-jlpt" class="hidden">
+                <div class="settings-group">
+                    <h3>JLPT Endless</h3>
+                    <div class="kb1-endless-line">Word → reading for as long as you like: new words keep coming while you're doing well, and a miss comes back a few words later.</div>
+                    <div class="kb1-mode-label">Levels</div>
+                    <div class="checkbox-group jlpt-levels">
+                        <label class="checkbox-label active-option">
+                            <input type="checkbox" id="jlpt-lv-5" data-jlpt-level="5" checked>
+                            <span class="custom-checkbox"></span>
+                            N5
+                        </label>
+                        <label class="checkbox-label active-option">
+                            <input type="checkbox" id="jlpt-lv-4" data-jlpt-level="4" checked>
+                            <span class="custom-checkbox"></span>
+                            N4
+                        </label>
+                        <label class="checkbox-label active-option">
+                            <input type="checkbox" id="jlpt-lv-3" data-jlpt-level="3" checked>
+                            <span class="custom-checkbox"></span>
+                            N3
+                        </label>
+                        <label class="checkbox-label active-option">
+                            <input type="checkbox" id="jlpt-lv-2" data-jlpt-level="2" checked>
+                            <span class="custom-checkbox"></span>
+                            N2
+                        </label>
+                        <label class="checkbox-label active-option">
+                            <input type="checkbox" id="jlpt-lv-1" data-jlpt-level="1" checked>
+                            <span class="custom-checkbox"></span>
+                            N1
+                        </label>
+                    </div>
+                    <div class="checkbox-group" style="margin-top: 0.75rem;">
+                        <label class="checkbox-label active-option">
+                            <input type="checkbox" id="jlpt-beyond">
+                            <span class="custom-checkbox"></span>
+                            <span id="jlpt-beyond-label">Beyond JLPT: about 3,600 more common words (~120 KB download)</span>
+                        </label>
+                        <label class="checkbox-label active-option">
+                            <input type="checkbox" id="jlpt-retype" checked>
+                            <span class="custom-checkbox"></span>
+                            Retype the correct answer after a miss
+                        </label>
+                    </div>
+                    <div id="jlpt-endless-options" class="kb1-endless-options">
+                        <div id="jlpt-load-msg" class="kb1-endless-line">Loading the word list…</div>
+                        <div><button type="button" id="jlpt-retry-btn" class="btn btn-secondary hidden">Retry</button></div>
+                        <div id="jlpt-all-started" class="kb1-endless-line jlpt-all-started hidden"><span>All JLPT words are started.</span> <button type="button" id="jlpt-add-beyond-btn" class="btn btn-secondary">Add words beyond JLPT</button></div>
+                        <div id="jlpt-endless-summary" class="kb1-endless-line"></div>
+                        <div id="jlpt-shared-host"></div>
+                        <div class="kb1-endless-line jlpt-credits">Words: JMdict and JmdictFurigana (EDRDG, CC BY-SA 4.0) · JLPT lists: Jonathan Waller, tanos.co.uk (CC BY) · frequency: wordfreq (CC BY-SA 4.0) · <a href="https://github.com/zachalexc/nihongo-lab/blob/main/JLPT_DATA.md" target="_blank" rel="noopener">sources and licence</a></div>
+                    </div>
+                </div>
+            </div>
+
             <div id="tab-dev" class="hidden">
                 <div id="dev-lock-view" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem 1rem; gap: 1rem; text-align: center;">
                     <div style="font-size: 2.5rem; margin-bottom: 0.25rem;">🔒</div>
@@ -746,6 +802,8 @@
                                 Only the Steps ticked above (off = all Steps)
                             </label>
                             <div id="kb1-endless-summary" class="kb1-endless-line"></div>
+                            <div id="kb1-endless-shared-host">
+                            <div id="endless-shared" class="kb1-endless-shared">
                             <div class="kb1-endless-actions">
                                 <button type="button" id="endless-export-btn" class="btn btn-secondary">Export progress</button>
                                 <button type="button" id="endless-import-btn" class="btn btn-secondary">Import</button>
@@ -763,6 +821,8 @@
                             <div id="kb1-endless-warn" class="kb1-endless-line kb1-endless-warn hidden"></div>
                             <div id="endless-ios-tip" class="kb1-endless-tip hidden"><span>Add to Home Screen keeps your progress safe on iPhone (Safari may clear it after 7 days without use).</span> <button type="button" id="endless-ios-tip-close" class="kb1-endless-tip-close" title="Dismiss">&times;</button></div>
                             <div><button type="button" id="endless-install-btn" class="btn btn-secondary hidden">Install app</button></div>
+                            </div>
+                            </div>
                         </div>
                         <div class="kb1-mode-label">Mock exam</div>
                         <div class="checkbox-group">
@@ -1030,13 +1090,14 @@
     <script src="vendor/wanakana.min.js?v=5.3.1"></script>
     <script src="kb1_core.js?v=1.14"></script>
     <script src="kb1.js?v=1.9"></script>
-    <script src="srs_core.js?v=2.3"></script>
-    <script src="srs_content_kb.js?v=1.0"></script>
+    <script src="srs_core.js?v=2.5"></script>
+    <script src="srs_content_kb.js?v=1.1"></script>
+    <script src="srs_content_jlpt.js?v=1.1"></script>
     <script src="srs_store.js?v=2.2"></script>
     <script src="srs_sync.js?v=1.0"></script>
     <script src="firebase_config.js?v=1.1"></script>
     <script src="cloud_firebase.js?v=1.0"></script>
-    <script src="endless.js?v=2.5"></script>
-    <script src="app.js?v=1.15"></script>
+    <script src="endless.js?v=2.8"></script>
+    <script src="app.js?v=1.16"></script>
 </body>
 </html>
