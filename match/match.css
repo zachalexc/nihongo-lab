@@ -213,7 +213,8 @@ summary { cursor: pointer; min-height: 40px; display: flex; align-items: center;
 .summary .row { display: flex; gap: .6rem; flex-wrap: wrap; }
 
 /* ------------------------------------------------------------------ wide screens and landscape phones */
-@media (min-width: 760px), (orientation: landscape) and (min-width: 560px) {
+/* R6: portrait tablets below 900 px use the stacked phone layout (812 px portrait clipped long meanings) */
+@media (min-width: 900px), (orientation: landscape) and (min-width: 560px) {
     #play { grid-template-columns: minmax(0, 1fr) clamp(260px, 28vw, 340px); grid-template-rows: auto auto minmax(0, 1fr);
             grid-template-areas: "bar bar" "quit quit" "table learn"; }
     .table { flex-direction: row; align-items: center; justify-content: center; padding: 14px; gap: 18px; }
@@ -251,6 +252,13 @@ summary { cursor: pointer; min-height: 40px; display: flex; align-items: center;
 /* v1.1: Words cards, disabled deck, level chips */
 .card.k.word .glyph { font-size: min(52cqh, calc(92cqw / var(--len, 2))); white-space: nowrap; }
 .card.a .gl.rd { font-family: var(--ja-card, inherit); font-size: 1.05rem; }
+/* deck B: the highlighted kanji and its part of the reading */
+mark.hl { background: none; color: inherit; }
+.card.k mark.hl, .lp-tile mark.hl, .chip .k mark.hl, .again .k mark.hl { color: #b3261e; }
+.card.k.word:has(mark.hl) .glyph { color: #8d877a; }
+.card.k.word:has(mark.hl) mark.hl { color: #b3261e; }
+.card.a mark.hl, .lp-gloss mark.hl, .chip .m mark.hl, .again .m mark.hl { color: #ffd479; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.lp-read .r.on { color: #ffd479; }
 .lp-tile.word { font-size: 2rem; width: auto; padding: 0 .4rem; white-space: nowrap; }
 .segmented input:disabled + span { opacity: .45; cursor: not-allowed; }
 .segmented small { font-size: .75em; opacity: .75; margin-left: .4em; font-weight: 500; }

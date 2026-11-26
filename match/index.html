@@ -13,7 +13,7 @@
     <link rel="icon" href="icon-192.png" type="image/png">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="match.css?v=1.5">
+    <link rel="stylesheet" href="match.css?v=1.6">
 </head>
 <body>
 <main id="app">
@@ -34,8 +34,9 @@
                 <div class="segmented" id="deck-choice">
                     <label><input type="radio" name="deck" value="kanji-meaning" checked><span>Meaning</span></label>
                     <label><input type="radio" name="deck" value="kanji-readings" disabled><span>Readings <small>soon</small></span></label>
-                    <label><input type="radio" name="deck" value="word-reading"><span>Words</span></label>
+                    <label><input type="radio" name="deck" value="words"><span>Words</span></label>
                 </div>
+                <label class="check hidden" id="whole-word-row"><input type="checkbox" id="whole-word"> Whole word (no highlighted kanji)</label>
             </fieldset>
 
             <fieldset class="field">
@@ -92,6 +93,7 @@
                 <button type="button" class="btn small hidden" id="signout-btn">Sign out</button>
             </div>
             <p id="account-hint" class="hint"></p>
+            <div id="account-confirm" class="confirm hidden" role="alert"></div>
         </section>
 
         <details class="options">
@@ -149,10 +151,10 @@
     </section>
 </main>
 
-<script src="match_core.js?v=1.3"></script>
-<script src="match_store.js?v=1.2"></script>
-<script src="match_sync.js?v=1.0"></script>
+<script src="match_core.js?v=1.4"></script>
+<script src="match_store.js?v=1.3"></script>
+<script src="match_sync.js?v=1.1"></script>
 <script src="match_cloud.js?v=1.0"></script>
-<script src="match.js?v=1.4"></script>
+<script src="match.js?v=1.5"></script>
 </body>
 </html>

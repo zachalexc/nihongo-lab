@@ -37,6 +37,7 @@
         NEW_QUOTA_FEW: 1,             // new kanji per board when the backlog is large ...
         BACKLOG_LARGE: 2,             // ... i.e. at least N * this weak kanji (in between: WEAK_QUOTA)
         MIN_BOARD: 3,                 // smallest board when the pool is tiny
+        AFFINITY_LOOKAHEAD: 30,       // deck B: how far down the list to look for a word sharing a kanji
 
         // Trouble list on Home
         TROUBLE_LAPSES: 3,            // fell back to weak this many times, or ...
@@ -83,6 +84,39 @@
             }
         }
         return false;
+    }
+
+    // ------------------------------------------------------------------ deck B: one kanji highlighted (R6)
+    // "日:にっ;中:ちゅう" / "思:おも;う" / "日本:にほん" → [{ t, r }]; a kana part reads as itself.
+    function splitParts(split) {
+        return String(split || '').split(';').filter(Boolean).map(p => {
+            const i = p.indexOf(':');
+            return i < 0 ? { t: p, r: p } : { t: p.slice(0, i), r: p.slice(i + 1) };
+        });
+    }
+    // Deck B cards from word items (deck C): one card per (word, part of the split holding a kanji).
+    // A part that reads several kanji together (日本:にほん, 今日:きょう) is one card with all of them
+    // highlighted. 々 is never a target. hk / hr = [start, end) of the highlight in k / the mark in r.
+    // Words whose split doesn't spell the word and its reading get no cards.
+    function kanjiCards(words) {
+        const out = [];
+        for (const w of words || []) {
+            const parts = splitParts(w.split);
+            if (!parts.length || parts.map(p => p.t).join('') !== w.k || parts.map(p => p.r).join('') !== w.r) continue;
+            const ks = new Set(w.kanji), done = new Set();
+            let kp = 0, rp = 0;
+            for (const p of parts) {
+                if ([...p.t].some(c => ks.has(c)) && !done.has(p.t)) {
+                    done.add(p.t);
+                    out.push(Object.assign({}, w, {
+                        id: 'h:' + w.k + '|' + w.r + '|' + p.t, wid: w.id, t: p.t,
+                        hk: [kp, kp + p.t.length], hr: [rp, rp + p.r.length],
+                    }));
+                }
+                kp += p.t.length; rp += p.r.length;
+            }
+        }
+        return out;
     }
 
     // ------------------------------------------------------------------ study days
@@ -202,7 +236,37 @@
     }
 
     // ------------------------------------------------------------------ mixed-up pairs
-    function pairKey(a, b) { return a < b ? a + '|' + b : b + '|' + a; }
+    // R6: a pair key is a JSON pair, smaller id first, so ids may contain '|' (word ids 'w:T|R' do).
+    // Before R6 keys were 'a|b', which split word ids wrongly; repairConfusions() fixes saved ones.
+    function pairKey(a, b) { return JSON.stringify(a < b ? [a, b] : [b, a]); }
+    function pairOf(key) {
+        try { const p = JSON.parse(key); if (Array.isArray(p) && p.length === 2 && p.every(x => typeof x === 'string')) return p; } catch (e) { /* old key */ }
+        return null;
+    }
+    // An old key 'a|b': kanji ids ('k:日') have no '|'; a word id 'w:T|R' has exactly one.
+    function oldPair(key) {
+        const t = String(key).split('|'), ids = [];
+        for (let i = 0; i < t.length; i++) {
+            if (t[i].startsWith('w:') && i + 1 < t.length) { ids.push(t[i] + '|' + t[i + 1]); i++; } else ids.push(t[i]);
+        }
+        return ids.length === 2 && ids.every(Boolean) ? ids : null;
+    }
+    // Returns { conf, changed }: every key a JSON pair, a/b taken from the key. Two entries for the
+    // same pair keep the newer one (by upd). An unreadable key is dropped.
+    function repairConfusions(conf) {
+        const out = {}; let changed = false;
+        for (const key in conf || {}) {
+            const c = conf[key];
+            let p = pairOf(key) || oldPair(key);
+            if (!p || !c || typeof c !== 'object') { changed = true; continue; }
+            if (p[1] < p[0]) p = [p[1], p[0]];
+            const nk = JSON.stringify(p);
+            if (nk !== key || c.a !== p[0] || c.b !== p[1]) changed = true;
+            const fixed = Object.assign({}, c, { a: p[0], b: p[1] });
+            if (!out[nk] || (fixed.upd || 0) > (out[nk].upd || 0)) { if (out[nk]) changed = true; out[nk] = fixed; }
+        }
+        return { conf: out, changed };
+    }
     function isActive(c) { return !!c && c.count > 0 && c.cleanDays.length < TUNING.CONFUSION_CLEAN_DAYS; }
     function partnersOf(confusions, id) {
         const out = [];
@@ -221,7 +285,7 @@
         const confusedNow = new Set();
         (record.wrongPairs || []).forEach(w => {
             const key = pairKey(w.k, w.a);
-            const [a, b] = key.split('|');
+            const [a, b] = w.k < w.a ? [w.k, w.a] : [w.a, w.k];
             const c = conf[key] || (conf[key] = { a, b, count: 0, lastDay: today, cleanDays: [] });
             c.count++; c.lastDay = today; c.cleanDays = [];
             if (now) { c.upd = now; delete c.by; }
@@ -300,10 +364,20 @@
             for (const p of partnersOf(conf, id)) if (chosen.length < N && fits(p)) { chosen.push(p); parts[part]++; }
             return true;
         }
+        // opts.affinity (deck B): new and fill items that share a kanji with the board so far come first
+        // (looking a few items ahead), so the highlight is what tells the cards apart.
+        const boardKanji = () => { const s = new Set(); chosen.forEach(c => (byId.get(c).kanji || []).forEach(k => s.add(k))); return s; };
         function take(list, n, part) {
             let added = 0;
-            for (const id of list) {
-                if (added >= n || chosen.length >= N) break;
+            const rest = list.slice();
+            while (rest.length && added < n && chosen.length < N) {
+                let i = 0;
+                if (opts.affinity && chosen.length && (part === 'new' || part === 'fill')) {
+                    const bk = boardKanji();
+                    const j = rest.slice(0, T.AFFINITY_LOOKAHEAD).findIndex(id => fits(id) && (byId.get(id).kanji || []).some(k => bk.has(k)));
+                    if (j > 0) i = j;
+                }
+                const id = rest.splice(i, 1)[0];
                 const before = chosen.length;
                 if (add(id, part)) added += chosen.length - before;
             }
@@ -451,7 +525,7 @@
         norm, synonymIndex, clash,
         studyDay, addDays, dayDiff, rng, shuffle,
         band, isDue, isTrouble, gradeBoard, applyGrade,
-        pairKey, isActive, partnersOf, updateConfusions, applyBoard,
+        pairKey, pairOf, oldPair, repairConfusions, splitParts, kanjiCards, isActive, partnersOf, updateConfusions, applyBoard,
         buildBoard, bestKey, isBetter, firstTry, poolLevels,
         nextLevel, fullySeen, poolFor, levelsInPlay, playingLabel,
         SIZES, normSize, KEY_ROWS, keyLabel, keyCols, keyMap, keyTarget, keyAllowed,

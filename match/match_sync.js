@@ -16,11 +16,15 @@
     if (typeof module === 'object' && module.exports) module.exports = factory();
     else root.MatchSync = factory();
 }(typeof self !== 'undefined' ? self : this, function () {
+    const Core = typeof module === 'object' && module.exports ? require('./match_core.js') : self.MatchCore;
     'use strict';
 
     const V = 1;
     const MAX_CHARS = 900000;                    // firestore.rules caps d.size() at this
-    const DECKS = ['kanji-meaning', 'word-reading'];
+    const DECKS = ['kanji-meaning', 'word-reading', 'word-kanji'];
+    // R6: deck B (word-kanji, 11,080 cards) is split over two docs, deck-word-kanji and deck-word-kanji-b,
+    // so a fully seen deck stays far below Firestore's 1 MiB doc limit (Japanese ids are 3 bytes a character).
+    const SHARDS = { 'word-kanji': 2 };
     const LEVELS = ['N5', 'N4', 'N3', 'N2', 'N1', 'X'];
     // Settings that stay on this device (or are merged on their own)
     const LOCAL_ONLY = ['persistAsked', 'iosTipDismissed', 'played', 'upd', 'by'];
@@ -33,6 +37,11 @@
                       const t = new Date(DAY0 + n * 86400000);
                       return t.getUTCFullYear() + '-' + pad(t.getUTCMonth() + 1) + '-' + pad(t.getUTCDate()); };
     const deckDoc = deck => 'deck-' + deck;
+    const shardDoc = (deck, i) => deckDoc(deck) + (i ? '-' + String.fromCharCode(97 + i) : '');
+    const deckDocs = deck => Array.from({ length: SHARDS[deck] || 1 }, (_, i) => shardDoc(deck, i));
+    const docNames = () => DECKS.flatMap(deckDocs);
+    function shardOf(id, n) { let h = 0; for (const ch of String(id)) h = (h * 31 + ch.codePointAt(0)) >>> 0; return h % n; }
+    const confShard = (key, c, n) => shardOf((c && c.a) || key, n);
     const sortObj = o => { const r = {}; Object.keys(o || {}).sort().forEach(k => { r[k] = o[k]; }); return r; };
 
     class SyncError extends Error {
@@ -161,9 +170,17 @@
         for (const k of Object.keys(conf || {}).sort()) cf[k] = Object.assign({}, conf[k], { by: conf[k].by || dev });
         return JSON.stringify({ v: V, devs, items: it, conf: cf });
     }
+    // decks: { doc name: text } (a sharded deck gives one text per doc)
     function packAll(state, dev) {
         const decks = {};
-        for (const d of DECKS) decks[d] = packDeck(state.items[d], state.confusions[d], dev);
+        for (const d of DECKS) {
+            const n = SHARDS[d] || 1, items = state.items[d] || {}, conf = state.confusions[d] || {};
+            if (n === 1) { decks[deckDoc(d)] = packDeck(items, conf, dev); continue; }
+            const its = Array.from({ length: n }, () => ({})), cfs = Array.from({ length: n }, () => ({}));
+            for (const k in items) its[shardOf(k, n)][k] = items[k];
+            for (const k in conf) cfs[confShard(k, conf[k], n)][k] = conf[k];
+            for (let i = 0; i < n; i++) decks[shardDoc(d, i)] = packDeck(its[i], cfs[i], dev);
+        }
         return { settings: packSettings(state, dev), decks };
     }
     function parse(doc, name) {
@@ -182,12 +199,16 @@
         const out = { settings: st.s || null, played: st.played || {}, bests: st.bests || {}, days: st.days || {},
                       items: {}, confusions: {} };
         for (const d of DECKS) {
-            const o = parse(raw[deckDoc(d)], deckDoc(d)) || {};
-            const devs = o.devs || [];
-            const items = {};
-            for (const k in o.items || {}) items[k] = decItem(o.items[k], devs);
+            const items = {}, conf = {};
+            for (const name of deckDocs(d)) {
+                const o = parse(raw[name], name) || {};
+                const devs = o.devs || [];
+                for (const k in o.items || {}) items[k] = decItem(o.items[k], devs);
+                Object.assign(conf, o.conf || {});
+            }
             out.items[d] = items;
-            out.confusions[d] = Object.assign({}, o.conf || {});
+            // R6: pair keys saved before the fix ('a|b') are repaired, so both sides use the same keys
+            out.confusions[d] = Core.repairConfusions(conf).conf;
         }
         return out;
     }
@@ -201,7 +222,7 @@
         const local = await store.load();
         let plan = null;
         await adapter.runTransaction(async tx => {
-            const names = ['meta', 'settings'].concat(DECKS.map(deckDoc));
+            const names = ['meta', 'settings'].concat(docNames());
             const raw = {};
             for (const n of names) raw[n] = await tx.get(n);
             const remote = unpack(raw);
@@ -210,10 +231,10 @@
             const sizes = { settings: out.settings.length };
             const writes = [];
             if (!raw.settings || raw.settings.d !== out.settings) writes.push(['settings', out.settings]);
-            for (const d of DECKS) {
-                sizes[deckDoc(d)] = out.decks[d].length;
-                const r = raw[deckDoc(d)];
-                if (!r || r.d !== out.decks[d]) writes.push([deckDoc(d), out.decks[d]]);
+            for (const n of docNames()) {
+                sizes[n] = out.decks[n].length;
+                const r = raw[n];
+                if (!r || r.d !== out.decks[n]) writes.push([n, out.decks[n]]);
             }
             for (const [n, d] of writes) {
                 if (d.length > MAX_CHARS) throw new SyncError('size', `Progress for ${n.replace('deck-', '')} is too large to sync (${d.length.toLocaleString('en')} characters; the limit is ${MAX_CHARS.toLocaleString('en')}). It is still saved in this browser.`, { doc: n, size: d.length });
@@ -232,9 +253,12 @@
     // ------------------------------------------------------------------ controller
     // Triggers: sign-in (incl. a remembered sign-in at start-up), page hide, after each board (debounced),
     // settings changes (debounced). A failed sync leaves local data as it was and retries later.
-    function controller({ cloud, store, onStatus, onApplied, debounceMs = 4000, retryMinMs = 30000, retryMaxMs = 300000,
+    // guard (decision 14, optional): { lastUid(), setLastUid(uid), hasLocal(): Promise<bool>,
+    //   ask(user): Promise<'merge'|'replace'|'cancel'>, replaceLocal(): Promise } — when a different account
+    // than the last one signs in and this browser has progress, nothing syncs until the user has chosen.
+    function controller({ cloud, store, onStatus, onApplied, guard, debounceMs = 4000, retryMinMs = 30000, retryMaxMs = 300000,
                           clock = () => Date.now(), setTimer = setTimeout, clearTimer = clearTimeout }) {
-        let user = null, subscribed = null, running = null, queued = null, dirty = false;
+        let user = null, subscribed = null, running = null, queued = null, dirty = false, holding = false;
         let timer = null, retryTimer = null, retryMs = 0, status = { state: 'signed-out', user: null };
         const set = s => { status = Object.assign({ user }, s); if (onStatus) onStatus(status); };
         const clear = () => { if (timer) clearTimer(timer); if (retryTimer) clearTimer(retryTimer); timer = retryTimer = null; };
@@ -248,10 +272,28 @@
                 subscribed = Promise.resolve(cloud.onUser(u => {
                     const prev = user; user = u;
                     if (!u) { clear(); set({ state: 'signed-out' }); return; }
-                    if (!prev || prev.uid !== u.uid) syncNow('sign-in');
+                    if (!prev || prev.uid !== u.uid) newUser(u);
                 })).catch(e => { subscribed = null; throw e; });
             }
             return subscribed;
+        }
+        async function newUser(u) {
+            if (guard) {
+                holding = true;
+                try {
+                    const last = guard.lastUid();
+                    if (last && last !== u.uid && await guard.hasLocal()) {
+                        set({ state: 'confirm' });
+                        const c = await guard.ask(u);
+                        if (user !== u) return;
+                        if (c === 'cancel') { holding = false; await signOut(); return; }
+                        if (c === 'replace') await guard.replaceLocal();
+                    }
+                    guard.setLastUid(u.uid);
+                } finally { holding = false; }
+                if (user !== u) return;
+            }
+            return syncNow('sign-in');
         }
         async function start() {
             if (!cloud.remembered()) { set({ state: 'signed-out' }); return; }
@@ -276,7 +318,7 @@
             return (e && e.message) || 'Sign-in failed.';
         }
         function syncNow() {
-            if (!user) return Promise.resolve(null);
+            if (!user || holding) return Promise.resolve(null);
             // one sync at a time; a request during a sync runs once right after it
             if (running) { if (!queued) queued = running.then(() => { queued = null; return syncNow(); }); return queued; }
             if (timer) { clearTimer(timer); timer = null; }
@@ -317,6 +359,6 @@
         };
     }
 
-    return { V, MAX_CHARS, DECKS, SyncError, encItem, decItem, remoteWins, mergeMap, mergeBests, mergeDays, mergePlayed,
+    return { V, MAX_CHARS, DECKS, SHARDS, deckDocs, docNames, shardOf, SyncError, encItem, decItem, remoteWins, mergeMap, mergeBests, mergeDays, mergePlayed,
              merge, packSettings, packDeck, packAll, unpack, sync, controller, dn, ds };
 }));

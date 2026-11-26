@@ -4,13 +4,16 @@
     'use strict';
 
     const C = window.MatchCore, S = window.MatchStore, Y = window.MatchSync, CLOUD = window.MatchCloud;
-    const APP_VERSION = '1.4';
+    const APP_VERSION = '1.5';
     const DECKS = {
         'kanji-meaning': { files: 'levels', front: 'kanji', back: 'meaning', items: ['kanji', 'kanji'] },
         'word-reading': { files: 'words', front: 'word', back: 'reading', items: ['word', 'words'] },
+        // R6 deck B: the word with one kanji highlighted ↔ its reading with that kanji's part marked
+        'word-kanji': { files: 'words', front: 'word', back: 'reading', items: ['word', 'words'], build: C.kanjiCards },
     };
+    const isWordDeck = d => d === 'word-reading' || d === 'word-kanji';
     const LEVEL_NAMES = { N5: 'N5', N4: 'N4', N3: 'N3', N2: 'N2', N1: 'N1', X: 'Extras' };
-    const DEFAULTS = { deck: 'kanji-meaning', level: 'N5', includeEasier: false, keepGoing: true, played: null, size: 12, showTimer: true, vibrate: true,
+    const DEFAULTS = { deck: 'kanji-meaning', level: 'N5', includeEasier: false, keepGoing: true, played: null, size: 12, showTimer: true, vibrate: true, wholeWord: false,
                        iosTipDismissed: false, persistAsked: false };
     const params = new URLSearchParams(location.search);
     const TEST_SEED = params.has('seed') ? Number(params.get('seed')) : null;
@@ -18,7 +21,7 @@
     const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
     const app = {
-        meta: null, synIdx: null, levels: { 'kanji-meaning': {}, 'word-reading': {} }, byId: new Map(),
+        meta: null, synIdx: null, levels: { 'kanji-meaning': {}, 'word-reading': {}, 'word-kanji': {} }, byId: new Map(),
         span: [], inPlay: { levels: [], added: [] }, pool: [], reviewPool: [],
         store: null, saved: null, settings: Object.assign({}, DEFAULTS),
         recent: [], board: null, boardCount: 0, timer: null, lastShown: null,
@@ -29,7 +32,17 @@
     // ------------------------------------------------------------------ helpers
     const deck = () => DECKS[app.settings.deck] ? app.settings.deck : 'kanji-meaning';
     const D = () => DECKS[deck()];
-    const isWord = it => it.id.startsWith('w:');
+    const isWord = it => it.id.startsWith('w:') || it.id.startsWith('h:');
+    // Words: deck B (one kanji highlighted) unless "Whole word" is on (deck C)
+    const wordDeck = () => (app.settings.wholeWord ? 'word-reading' : 'word-kanji');
+    // A span with part of the text marked (deck B: the target kanji / its part of the reading).
+    function marked(cls, text, range, ja) {
+        const s = el('span', cls); if (ja) s.lang = 'ja';
+        if (!range) { s.textContent = text; return s; }
+        s.append(document.createTextNode(text.slice(0, range[0])), el('mark', 'hl', text.slice(range[0], range[1])),
+                 document.createTextNode(text.slice(range[1])));
+        return s;
+    }
     const items = () => app.saved.items[deck()] || (app.saved.items[deck()] = {});
     const confusions = () => app.saved.confusions[deck()] || (app.saved.confusions[deck()] = {});
     const nItems = n => plural(n, D().items[0], D().items[1]);
@@ -39,7 +52,7 @@
     const glossText = it => it.gloss + (it.gloss2 ? ', ' + it.gloss2 : '');
     const backText = it => isWord(it) ? it.r : glossText(it);
     const playingText = () => app.inPlay.levels.length ? C.playingLabel(app.inPlay, LEVEL_NAMES) : LEVEL_NAMES[app.settings.level];
-    const choiceName = () => (deck() === 'word-reading' ? 'Words ' : '') + playingText();
+    const choiceName = () => (isWordDeck(deck()) ? 'Words ' : '') + playingText();
     // PC keyboard layout (decision 9): both sides the same grid, key letters on the cards.
     const KEY_LAYOUT = '(hover: hover) and (pointer: fine) and (min-width: 700px)';
     // Off since R4 (Zachary 11/26: harder to know which key to press than expected). true turns it back on.
@@ -60,8 +73,8 @@
             const res = await fetch(`data/${info.file}?b=${app.meta.build}`);
             if (!res.ok) throw new Error(`Couldn't load ${info.file} (${res.status})`);
             const doc = await res.json();
-            cache[lv] = doc.items;
-            doc.items.forEach(it => app.byId.set(it.id, it));
+            cache[lv] = D().build ? D().build(doc.items) : doc.items;
+            cache[lv].forEach(it => app.byId.set(it.id, it));
         }));
         return levels.flatMap(lv => cache[lv] || []);
     }
@@ -132,11 +145,44 @@
     // ------------------------------------------------------------------ sign-in and sync (R5)
     function startSync() {
         if (!Y || !CLOUD) { $('account').classList.add('hidden'); return; }
-        app.sync = Y.controller({ cloud: CLOUD, store: app.store, onStatus: renderAccount, onApplied: syncApplied });
+        app.sync = Y.controller({ cloud: CLOUD, store: app.store, onStatus: renderAccount, onApplied: syncApplied, guard: accountGuard() });
         document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') app.sync.hidden(); });
         window.addEventListener('pagehide', () => app.sync.hidden());
         window.addEventListener('online', () => app.sync.online());
         app.sync.start();
+    }
+    // Decision 14: a different account than the last one on this browser, with progress here: ask first.
+    const LAST_UID = 'nihongoMatch.lastUid';         // outside the progress prefix, so Reset keeps it
+    function accountGuard() {
+        return {
+            lastUid: () => { try { return localStorage.getItem(LAST_UID); } catch (e) { return null; } },
+            setLastUid: uid => { try { localStorage.setItem(LAST_UID, uid); } catch (e) { /* private mode */ } },
+            hasLocal: async () => {
+                const s = await app.store.load();
+                return Object.values(s.items).some(m => Object.keys(m || {}).length > 0) || (s.log || []).length > 0;
+            },
+            ask: u => new Promise(resolve => {
+                const box = $('account-confirm'); box.textContent = '';
+                box.appendChild(el('p', null, `${u.email || 'This account'} is not the account last used on this browser, and this browser has Kanji Match progress.`));
+                const row = el('div', 'row');
+                [['merge', "Add this browser's progress to this account", 'btn small primary'],
+                 ['replace', "Use only this account's progress (this browser's progress is saved as a backup file first)", 'btn small'],
+                 ['cancel', 'Cancel and sign out', 'btn small']].forEach(([v, text, cls]) => {
+                    const b = el('button', cls, text); b.type = 'button';
+                    b.addEventListener('click', () => { box.classList.add('hidden'); box.textContent = ''; resolve(v); });
+                    row.appendChild(b);
+                });
+                box.appendChild(row); box.classList.remove('hidden');
+            }),
+            replaceLocal: async () => {
+                await exportProgress();
+                const st = (await app.store.load()).settings || {};
+                await app.store.reset({ keepMeta: true });
+                // the account's settings win at the next sync (upd 0); device-only ones stay
+                await app.store.saveSettings({ persistAsked: !!st.persistAsked, iosTipDismissed: !!st.iosTipDismissed, upd: 0 });
+                await reloadSaved();
+            },
+        };
     }
     // Merged progress from the cloud was saved: show it (after the board, if one is being played).
     async function syncApplied() {
@@ -166,7 +212,7 @@
             line.appendChild(el('span', 'who', st.user.email || 'Signed in'));
             const at = st.at ? new Date(st.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
             const what = { syncing: 'Syncing…', synced: 'Synced · ' + at, offline: 'Offline, will retry',
-                           error: "Couldn't sync", loading: 'Signing in…' }[st.state] || '';
+                           error: "Couldn't sync", loading: 'Signing in…', confirm: 'Choose below' }[st.state] || '';
             line.appendChild(document.createTextNode(' · ' + what));
         }
         hint.textContent = st.message || (signedIn ? '' : 'Google sign-in, the same as Endless. Your progress then follows you to other devices.');
@@ -182,6 +228,8 @@
         if (typeof st.includeEasier !== 'boolean') st.includeEasier = false;
         delete st.includeLower;
         if (typeof st.keepGoing !== 'boolean') st.keepGoing = true;
+        // R6: Words now means deck B by default; a saved Words choice (deck C) moves to deck B once.
+        if (typeof st.wholeWord !== 'boolean') { st.wholeWord = false; if (st.deck === 'word-reading') st.deck = 'word-kanji'; }
         // R5: settings saved before sync count as chosen long ago (1), a fresh browser's defaults as never (0).
         if (typeof st.upd !== 'number') st.upd = Object.keys(saved).some(k => !['persistAsked', 'iosTipDismissed', 'played'].includes(k)) ? 1 : 0;
     }
@@ -205,8 +253,10 @@
     function applySettingsToForm() {
         const f = $('setup');
         f.querySelector(`input[name="level"][value="${app.settings.level}"]`).checked = true;
-        const dk = f.querySelector(`input[name="deck"][value="${deck()}"]`);
+        const dk = f.querySelector(`input[name="deck"][value="${isWordDeck(deck()) ? 'words' : deck()}"]`);
         if (dk) dk.checked = true;
+        $('whole-word').checked = !!app.settings.wholeWord;
+        $('whole-word-row').classList.toggle('hidden', !isWordDeck(deck()));
         const size = f.querySelector(`input[name="size"][value="${app.settings.size}"]`);
         if (size) size.checked = true;
         $('include-easier').checked = !!app.settings.includeEasier;
@@ -221,7 +271,12 @@
         f.addEventListener('change', e => {
             if (e.target.name === 'level') app.settings.level = e.target.value;
             if (e.target.name === 'size') app.settings.size = C.normSize(e.target.value);
-            if (e.target.name === 'deck') { app.settings.deck = e.target.value; loadRecent(); }
+            if (e.target.name === 'deck') { app.settings.deck = e.target.value === 'words' ? wordDeck() : e.target.value; loadRecent(); }
+            if (e.target.id === 'whole-word') {
+                app.settings.wholeWord = e.target.checked;
+                if (isWordDeck(deck())) { app.settings.deck = wordDeck(); loadRecent(); }
+            }
+            $('whole-word-row').classList.toggle('hidden', !isWordDeck(deck()));
             if (e.target.id === 'keep-going') app.settings.keepGoing = e.target.checked;
             if (e.target.id === 'include-easier') app.settings.includeEasier = e.target.checked;
             touchSettings(); renderHome();
@@ -329,9 +384,7 @@
         const tl = $('trouble-list'); tl.textContent = '';
         trouble.forEach(it => {
             const c = el('span', 'chip');
-            const k = el('span', 'k', it.k); k.lang = 'ja';
-            const m = el('span', 'm', backText(it)); if (isWord(it)) m.lang = 'ja';
-            c.append(k, m);
+            c.append(marked('k', it.k, it.hk, true), marked('m', backText(it), it.hr, isWord(it)));
             tl.appendChild(c);
         });
 
@@ -420,6 +473,8 @@
     }
 
     // ------------------------------------------------------------------ board
+    // Side-by-side board (match.css): wide screens and landscape. R6: portrait tablets below 900 px stack, like phones.
+    const WIDE_LAYOUT = '(min-width: 900px), (orientation: landscape) and (min-width: 560px)';
     const SHORT_LANDSCAPE = '(orientation: landscape) and (max-height: 500px) and (min-width: 560px)';
     function gridFor(n) {
         if (keyLayout()) { const c = C.keyCols(n), r = Math.ceil(n / c); return { kc: c, kr: r, ac: c, ar: r }; }
@@ -435,7 +490,7 @@
         pool = mode === 'review' ? app.reviewPool : app.pool;
         const seed = TEST_SEED !== null ? TEST_SEED + app.boardCount : ((Date.now() ^ (Math.random() * 4294967296)) >>> 0);
         const b = C.buildBoard({ pool, states: items(), confusions: confusions(), size: app.settings.size, mode,
-                                 recent: app.recent, today: today(), seed, synIdx: app.synIdx });
+                                 recent: app.recent, today: today(), seed, synIdx: app.synIdx, affinity: deck() === 'word-kanji' });
         if (b.empty) {
             $('review-hint').textContent = "You've reviewed everything that's due for now. Play a board instead.";
             return;
@@ -477,8 +532,8 @@
             const it = app.byId.get(id);
             const c = el('button', 'card k' + (isWord(it) ? ' word' : '')); c.type = 'button';
             c.dataset.id = id; c.dataset.kind = 'k';
-            c.setAttribute('aria-label', (isWord(it) ? 'word ' : 'kanji ') + it.k); c.setAttribute('aria-pressed', 'false');
-            const s = el('span', 'glyph', it.k); s.lang = 'ja'; c.appendChild(s);
+            c.setAttribute('aria-label', (isWord(it) ? 'word ' : 'kanji ') + it.k + (it.t ? `, highlighted ${it.t}` : '')); c.setAttribute('aria-pressed', 'false');
+            c.appendChild(marked('glyph', it.k, it.hk, true));
             if (isWord(it)) c.style.setProperty('--len', Math.max(2, [...it.k].length));
             zk.appendChild(c);
         });
@@ -487,9 +542,8 @@
             const it = app.byId.get(id);
             const c = el('button', 'card a'); c.type = 'button';
             c.dataset.id = id; c.dataset.kind = 'a';
-            c.setAttribute('aria-label', `${D().back}: ` + backText(it)); c.setAttribute('aria-pressed', 'false');
-            const g = el('span', 'gl' + (isWord(it) ? ' rd' : ''), backText(it)); if (isWord(it)) g.lang = 'ja';
-            c.appendChild(g);
+            c.setAttribute('aria-label', `${D().back}: ` + backText(it) + (it.hr ? `, marked ${it.r.slice(it.hr[0], it.hr[1])}` : '')); c.setAttribute('aria-pressed', 'false');
+            c.appendChild(marked('gl' + (isWord(it) ? ' rd' : ''), backText(it), it.hr, isWord(it)));
             za.appendChild(c);
         });
         [[zk, km.k], [za, km.a]].forEach(([z, codes]) => Array.from(z.children).forEach((c, i) => {
@@ -506,7 +560,7 @@
         learn.appendChild(el('p', 'learn-empty', `Tap a ${D().front}, then its ${D().back}.`));
         $('zone-kanji').setAttribute('aria-label', D().front === 'word' ? 'Words' : 'Kanji');
         $('zone-answers').setAttribute('aria-label', D().back === 'reading' ? 'Readings' : 'Meanings');
-        $('bar-title').textContent = (B.mode === 'review' ? (deck() === 'word-reading' ? 'Words ' : '') + 'Review' : choiceName());
+        $('bar-title').textContent = (B.mode === 'review' ? (isWordDeck(deck()) ? 'Words ' : '') + 'Review' : choiceName());
         $('bar-timer').classList.toggle('hidden', !app.settings.showTimer);
         updateBar();
     }
@@ -627,8 +681,8 @@
 
     function showLearnWord(it, p) {
         const lp = el('div', 'lp');
-        const tile = el('div', 'lp-tile word', it.k); tile.lang = 'ja'; lp.appendChild(tile);
-        const rd = el('div', 'lp-gloss', it.r); rd.lang = 'ja'; lp.appendChild(rd);
+        const tile = marked('lp-tile word', it.k, it.hk, true); lp.appendChild(tile);
+        const rd = marked('lp-gloss', it.r, it.hr, true); lp.appendChild(rd);
         lp.appendChild(el('div', 'lp-more', it.gloss));
         if (it.alt && it.alt.length) {
             const a = el('div', 'lp-more', 'Also read: ' + it.alt.join(', ')); a.lang = 'ja'; lp.appendChild(a);
@@ -637,7 +691,7 @@
         if (parts.length) {
             const row = el('div', 'lp-read');
             parts.forEach(([k, r]) => {
-                const s = el('span', 'r', `${k} ${r}`); s.lang = 'ja'; row.appendChild(s);
+                const s = el('span', 'r' + (k === it.t ? ' on' : ''), `${k} ${r}`); s.lang = 'ja'; row.appendChild(s);
             });
             lp.appendChild(row);
         }
@@ -722,9 +776,7 @@
             again.forEach(g => {
                 const it = app.byId.get(g.id);
                 const bt = el('button'); bt.type = 'button';
-                const k = el('span', 'k', it.k); k.lang = 'ja';
-                const m = el('span', 'm', isWord(it) ? it.r : it.gloss); if (isWord(it)) m.lang = 'ja';
-                bt.append(k, m);
+                bt.append(marked('k', it.k, it.hk, true), marked('m', isWord(it) ? it.r : it.gloss, it.hr, isWord(it)));
                 bt.setAttribute('aria-label', `Show ${it.k}, ${backText(it)}`);
                 bt.addEventListener('click', () => { showLearn(g.id); $('learn').classList.add('open'); });
                 box.appendChild(bt);
@@ -770,7 +822,7 @@
         $('quit-yes').addEventListener('click', () => { $('quit-bar').classList.add('hidden'); if (app.board && !app.board.done) finish(true); });
         $('learn').addEventListener('click', e => {
             if (e.target.closest('a,button')) return;
-            if (window.matchMedia('(min-width: 760px), (orientation: landscape) and (min-width: 560px)').matches) return;
+            if (window.matchMedia(WIDE_LAYOUT).matches) return;
             $('learn').classList.toggle('open');
         });
         document.addEventListener('keydown', e => {

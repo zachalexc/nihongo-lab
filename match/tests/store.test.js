@@ -72,7 +72,8 @@ test('export → reset → import restores progress; foreign files are rejected'
     const d = await s.load();
     assert.equal(d.items['kanji-meaning']['k:山'].box, 4);
     assert.equal(d.settings.size, 12);
-    assert.equal(d.confusions['kanji-meaning']['k:休|k:体'].count, 1);
+    // R6: the old 'a|b' key comes back repaired as a JSON pair
+    assert.equal(d.confusions['kanji-meaning']['["k:休","k:体"]'].count, 1);
     await assert.rejects(s.importAll({ hello: 1 }), /not a Kanji Match backup/);
     await assert.rejects(s.importAll({ format: S.FORMAT, schema: 99, decks: {} }), /version 99/);
 });

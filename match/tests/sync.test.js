@@ -56,7 +56,7 @@ function device(srv, opts = {}) {
     const cloud = cloudFactory(win);
     const store = S.create(storage);
     const timers = [];
-    const ctl = Y.controller({ cloud, store, debounceMs: 10, onApplied: opts.onApplied,
+    const ctl = Y.controller({ cloud, store, debounceMs: 10, onApplied: opts.onApplied, guard: opts.guard,
                                setTimer: (f, ms) => { timers.push({ f, ms }); return timers.length; }, clearTimer: () => {} });
     return { storage, store, cloud, ctl, win, created, timers };
 }
@@ -310,4 +310,136 @@ test('a deck doc over 900,000 characters is refused: no write at all, local kept
     assert.match(A.ctl.status().message, /too large/);
     assert.equal(srv.writes, 0);
     assert.equal(Object.keys((await A.store.load()).items[KM]).length, 9000);
+});
+
+
+// ---------------------------------------------------------------- R6: deck B (word-kanji) sync, sharded docs
+const WK = 'word-kanji';
+const docsOf = (srv, uid = 'u1') => { const raw = {}; for (const n of ['meta', 'settings'].concat(Y.docNames())) raw[n] = srv.docs.get(uid + '/' + n) || null; return raw; };
+test('deck B syncs between two devices over its two docs', async () => {
+    const srv = server(), A = device(srv), B = device(srv);
+    const a = { 'h:自分|じぶん|自': state(3, 100), 'h:自分|じぶん|分': state(1, 110), 'h:日本|にほん|日本': state(2, 120) };
+    await seed(A.store, WK, a, { confusions: { [C.pairKey('h:自分|じぶん|自', 'h:時間|じかん|時')]: { a: 'h:自分|じぶん|自', b: 'h:時間|じかん|時', count: 1, lastDay: '2026-11-26', cleanDays: [], upd: 130 } } });
+    await A.ctl.signIn(); await A.ctl.syncNow();
+    assert.ok(srv.docs.has('u1/deck-word-kanji') && srv.docs.has('u1/deck-word-kanji-b'));
+    const shards = ['deck-word-kanji', 'deck-word-kanji-b'].map(n => Object.keys(JSON.parse(srv.docs.get('u1/' + n).d).items).length);
+    assert.equal(shards[0] + shards[1], 3);
+    await B.ctl.signIn(); await B.ctl.syncNow();
+    const b = await B.store.load();
+    assert.deepEqual(strip(b.items[WK]), strip(a));
+    assert.equal(Object.keys(b.confusions[WK]).length, 1);
+    assert.deepEqual(b.items[WR], {}, 'deck C not touched');
+    // a change on B comes back to A
+    await seed(B.store, WK, Object.assign({}, b.items[WK], { 'h:自分|じぶん|分': state(2, 900) }));
+    await B.ctl.syncNow(); await A.ctl.syncNow();
+    assert.equal((await A.store.load()).items[WK]['h:自分|じぶん|分'].box, 2);
+});
+
+test('a fully seen deck B fits its two docs (size reported)', () => {
+    const items = {}; let t = 1764100000000;
+    const dir = path.join(__dirname, '..', 'data');
+    for (const f of fs.readdirSync(dir).filter(f => /^words_.*\.json$/.test(f))) {
+        for (const it of C.kanjiCards(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')).items)) {
+            items[it.id] = state(5, t += 997, { due: '2027-03-14', seen: 23, misses: 7, lapses: 2, weakShows: 6, weakRun: 0,
+                unsureDays: ['2026-12-01', '2026-12-09'], today: { day: '2027-01-20', weakShows: 1 }, lastSeen: t - 3 });
+        }
+    }
+    const conf = {};
+    Object.keys(items).slice(0, 300).forEach((id, i, a) => {
+        const b = a[(i + 7) % a.length];
+        conf[C.pairKey(id, b)] = { a: id < b ? id : b, b: id < b ? b : id, count: 3, lastDay: '2027-01-20', cleanDays: ['2027-01-21'], upd: 1764100000000 + i };
+    });
+    const out = Y.packAll({ settings: {}, bests: {}, days: {}, items: { [WK]: items }, confusions: { [WK]: conf } }, '7f3c2a10-1234-4abc-9def-0123456789ab');
+    const sizes = Y.deckDocs(WK).map(n => [n, out.decks[n].length, Buffer.byteLength(out.decks[n], 'utf8')]);
+    console.log(`  Deck B: ${Object.keys(items).length} items + 300 pairs → ` + sizes.map(([n, c, b]) => `${n} ${c} characters, ${b} bytes`).join('; '));
+    sizes.forEach(([n, c, b]) => { assert.ok(c < Y.MAX_CHARS * 0.6, n); assert.ok(b < 600000, n); });
+    const raw = {}; Y.deckDocs(WK).forEach(n => { raw[n] = { v: 1, mt: 1, d: out.decks[n] }; });
+    const back = Y.unpack(raw);
+    assert.equal(Object.keys(back.items[WK]).length, Object.keys(items).length);
+    assert.equal(Object.keys(back.confusions[WK]).length, 300);
+});
+
+test('old pair keys in a cloud doc are repaired on both sides and merge into one entry', async () => {
+    const srv = server(), A = device(srv);
+    const x = 'w:第|だい', y = 'w:台|だい';
+    // an R5 device wrote the broken key
+    const conf = { [x + '|' + y]: { a: 'w:第', b: 'だい|w:台|だい', count: 2, lastDay: '2026-11-25', cleanDays: [], upd: 50, by: 'dev-old' } };
+    srv.docs.set('u1/deck-' + WR, { v: 1, mt: 1, d: Y.packDeck({}, conf, 'dev-old') });
+    await A.ctl.signIn(); await A.ctl.syncNow();
+    const local = (await A.store.load()).confusions[WR];
+    assert.deepEqual(Object.keys(local), [C.pairKey(x, y)]);
+    assert.equal(local[C.pairKey(x, y)].a, x < y ? x : y);
+    const cloud = Y.unpack(docsOf(srv)).confusions[WR];
+    assert.deepEqual(Object.keys(cloud), [C.pairKey(x, y)]);
+    assert.ok(!JSON.parse(srv.docs.get('u1/deck-' + WR).d).conf[x + '|' + y], 'repaired doc written back');
+});
+
+// ---------------------------------------------------------------- R6: different-account guard (decision 14)
+const settle = () => new Promise(res => setTimeout(res, 5));
+function guardFor(last, answer) {
+    const g = { last, asked: 0, replaced: 0, answer,
+        lastUid: () => g.last, setLastUid: uid => { g.last = uid; },
+        hasLocal: null, ask: async () => { g.asked++; return typeof g.answer === 'function' ? g.answer() : g.answer; },
+        replaceLocal: null };
+    return g;
+}
+async function guarded(last, answer) {
+    const srv = server();
+    // the account already has progress from another browser
+    const other = device(srv); await seed(other.store, KM, { 'k:山': state(4, 10) }); await other.ctl.signIn(); await other.ctl.syncNow();
+    const g = guardFor(last, answer);
+    const A = device(srv, { guard: g });
+    g.hasLocal = async () => Object.values((await A.store.load()).items).some(m => Object.keys(m).length > 0);
+    g.replaceLocal = async () => { g.replaced++; g.backup = await A.store.exportAll(); await A.store.reset({ keepMeta: true }); };
+    return { srv, A, g };
+}
+test('guard: a different account with local progress is asked first; "add" merges this browser up', async () => {
+    const { srv, A, g } = await guarded('u-old', 'merge');
+    await seed(A.store, KM, { 'k:川': state(2, 20) });
+    await A.ctl.signIn(); await settle(); await A.ctl.syncNow();
+    assert.equal(g.asked, 1); assert.equal(g.last, 'u1');
+    assert.ok(Y.unpack(docsOf(srv)).items[KM]['k:川'], 'local progress added to the account');
+    assert.ok((await A.store.load()).items[KM]['k:山'], 'account progress came down');
+});
+test('guard: "use only this account" backs up, clears local progress, then pulls the account', async () => {
+    const { srv, A, g } = await guarded('u-old', 'replace');
+    await seed(A.store, KM, { 'k:川': state(2, 20) });
+    await A.ctl.signIn(); await settle(); await A.ctl.syncNow();
+    assert.equal(g.replaced, 1);
+    assert.ok(g.backup.decks[KM].items['k:川'], 'backup had the local progress');
+    const items = (await A.store.load()).items[KM];
+    assert.deepEqual(Object.keys(items), ['k:山']);
+    assert.ok(!Y.unpack(docsOf(srv)).items[KM]['k:川'], 'nothing from this browser went up');
+});
+test('guard: cancel signs out and writes nothing; no ask for the same account or an empty browser', async () => {
+    let r = await guarded('u-old', 'cancel');
+    await seed(r.A.store, KM, { 'k:川': state(2, 20) });
+    const w0 = r.srv.writes;
+    await r.A.ctl.signIn(); await settle(); await r.A.ctl.syncNow();
+    assert.equal(r.A.ctl.status().state, 'signed-out'); assert.equal(r.srv.writes, w0); assert.equal(r.g.last, 'u-old');
+    r = await guarded('u1', 'cancel');
+    await seed(r.A.store, KM, { 'k:川': state(2, 20) });
+    await r.A.ctl.signIn(); await settle(); await r.A.ctl.syncNow();
+    assert.equal(r.g.asked, 0); assert.equal(r.A.ctl.status().state, 'synced');
+    r = await guarded('u-old', 'cancel');          // nothing played on this browser
+    await r.A.ctl.signIn(); await settle(); await r.A.ctl.syncNow();
+    assert.equal(r.g.asked, 0); assert.equal(r.g.last, 'u1');
+    r = await guarded(null, 'cancel');             // first sign-in ever on this browser: merge up as before (decision 10)
+    await seed(r.A.store, KM, { 'k:川': state(2, 20) });
+    await r.A.ctl.signIn(); await settle(); await r.A.ctl.syncNow();
+    assert.equal(r.g.asked, 0); assert.ok(Y.unpack(docsOf(r.srv)).items[KM]['k:川']);
+});
+test('guard: nothing syncs while the question is open', async () => {
+    let release; const wait = new Promise(res => { release = res; });
+    const { srv, A, g } = await guarded('u-old', () => wait.then(() => 'merge'));
+    await seed(A.store, KM, { 'k:川': state(2, 20) });
+    const w0 = srv.writes;
+    await A.ctl.signIn();
+    await new Promise(res => setTimeout(res, 5));
+    assert.equal(A.ctl.status().state, 'confirm');
+    assert.equal(await A.ctl.syncNow(), null); A.ctl.hidden();
+    assert.equal(srv.writes, w0);
+    release(); await new Promise(res => setTimeout(res, 5)); await A.ctl.syncNow();
+    assert.ok(Y.unpack(docsOf(srv)).items[KM]['k:川']);
+    assert.equal(g.asked, 1);
 });

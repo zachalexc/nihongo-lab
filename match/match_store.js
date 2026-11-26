@@ -12,13 +12,14 @@
     if (typeof module === 'object' && module.exports) module.exports = factory();
     else root.MatchStore = factory();
 }(typeof self !== 'undefined' ? self : this, function () {
+    const Core = typeof module === 'object' && module.exports ? require('./match_core.js') : self.MatchCore;
     'use strict';
 
     const PREFIX = 'nihongoMatch.v1.';
     const SCHEMA = 1;
     const FORMAT = 'nihongo-match-export';
     const LOG_KEEP = 300;          // finished boards kept in the history log
-    const DECKS = ['kanji-meaning', 'word-reading'];
+    const DECKS = ['kanji-meaning', 'word-reading', 'word-kanji'];
 
     function uuid() {
         if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
@@ -96,9 +97,15 @@
             return m;
         }
 
+        // R6: mixed-up pairs saved with the old 'a|b' keys are repaired (and written back) on load.
+        function readConf(d) {
+            const r = Core.repairConfusions(read('confusions.' + d, {}));
+            if (r.changed) { try { write('confusions.' + d, r.conf); } catch (e) { /* full: repaired again next load */ } }
+            return r.conf;
+        }
         async function load() {
             const items = {}, confusions = {};
-            DECKS.forEach(d => { items[d] = read('items.' + d, {}); confusions[d] = read('confusions.' + d, {}); });
+            DECKS.forEach(d => { items[d] = read('items.' + d, {}); confusions[d] = readConf(d); });
             return {
                 meta: meta(), settings: read('settings', {}), items, confusions,
                 bests: read('bests', {}), days: read('days', {}), log: read('log', []),
@@ -130,7 +137,7 @@
         // The log and meta are never touched. Returns true if anything changed.
         async function applySync(fn) {
             const cur = { settings: read('settings', {}), bests: read('bests', {}), days: read('days', {}), items: {}, confusions: {} };
-            DECKS.forEach(d => { cur.items[d] = read('items.' + d, {}); cur.confusions[d] = read('confusions.' + d, {}); });
+            DECKS.forEach(d => { cur.items[d] = read('items.' + d, {}); cur.confusions[d] = readConf(d); });
             const m = fn(cur);
             const pairs = [];
             const add = (key, a, b) => { if (stable(a) !== stable(b)) pairs.push([key, b]); };
@@ -170,7 +177,7 @@
             const pairs = [];
             DECKS.forEach(d => {
                 const deck = obj.decks[d] || {};
-                pairs.push(['items.' + d, deck.items || {}], ['confusions.' + d, deck.confusions || {}]);
+                pairs.push(['items.' + d, deck.items || {}], ['confusions.' + d, Core.repairConfusions(deck.confusions).conf]);
             });
             pairs.push(['bests', obj.bests || {}], ['days', obj.days || {}], ['settings', obj.settings || {}],
                        ['log', obj.log || []]);
