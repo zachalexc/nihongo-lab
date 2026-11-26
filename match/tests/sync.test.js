@@ -443,3 +443,15 @@ test('guard: nothing syncs while the question is open', async () => {
     assert.ok(Y.unpack(docsOf(srv)).items[KM]['k:川']);
     assert.equal(g.asked, 1);
 });
+
+// ---------------------------------------------------------------- R7: deck A (kanji-readings) syncs like the others
+test('Readings progress syncs between two devices in deck-kanji-readings', async () => {
+    const srv = server(), A = device(srv), B = device(srv);
+    await seed(A.store, 'kanji-readings', { 'r:休': state(3, 100), 'r:人': state(1, 110) });
+    await A.ctl.signIn(); await A.ctl.syncNow();
+    assert.ok(srv.docs.has('u1/deck-kanji-readings'));
+    await B.ctl.signIn(); await B.ctl.syncNow();
+    const b = await B.store.load();
+    assert.deepEqual(Object.keys(b.items['kanji-readings']).sort(), ['r:人', 'r:休'].sort());
+    assert.deepEqual(b.items[KM], {}, 'Meaning not touched');
+});

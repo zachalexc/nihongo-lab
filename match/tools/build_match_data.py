@@ -234,6 +234,100 @@ def build_words(repo, level_of, report, errors):
     report["words per level"] = [f"{lv}: {len(v)}" for lv, v in by_level.items()]
     return by_level
 
+# ---------------------------------------------------------------- deck A: kanji ↔ readings (R7)
+READ_CAP_ON, READ_CAP_KUN = 2, 3
+VOICED = dict(zip("かきくけこさしすせそたちつてとはひふへほ", "がぎぐげござじずぜぞだぢづでどばびぶべぼ"))
+VOICED.update({"ち": "じ", "つ": "ず"})        # usual spellings of ぢ / づ in words
+HALF = dict(zip("はひふへほ", "ぱぴぷぺぽ"))
+
+
+def hira(s):
+    return "".join(chr(ord(c) - 0x60) if "ァ" <= c <= "ヶ" else c for c in s)
+
+
+def variants(h):
+    """A reading as it can appear inside a word: rendaku (voiced first kana) and small っ at the end."""
+    out = {h}
+    if h and h[0] in VOICED:
+        out.add(VOICED[h[0]] + h[1:])
+        if h[0] == "ち": out.add("ぢ" + h[1:])
+        if h[0] == "つ": out.add("づ" + h[1:])
+    if h and h[0] in HALF:
+        out.add(HALF[h[0]] + h[1:])
+    for v in list(out):
+        if len(v) > 1 and v[-1] in "くきつち":
+            out.add(v[:-1] + "っ")
+    return out
+
+
+def kun_parts(k):
+    stem, _, oku = k.partition("(")
+    return stem, oku.rstrip(")")
+
+
+def reading_use(repo, kd, level_of):
+    """How often the word data split uses each reading of each kanji: {kanji: {reading as in KANJIDIC: n}}."""
+    src = json.load(open(os.path.join(repo, "jlpt_words.json"), encoding="utf-8"))
+    col = {f: i for i, f in enumerate(src["fields"])}
+    use = collections.defaultdict(collections.Counter)
+    unmatched = 0
+    for row in src["rows"]:
+        parts = [x.partition(":") for x in (row[col["split"]] or "").split(";") if x]
+        for i, (t, colon, r) in enumerate(parts):
+            if not colon or len(t) != 1 or t not in level_of or t not in kd:
+                continue
+            after = "".join(x[0] for x in parts[i + 1:] if not x[1])[:4]     # okurigana that follows
+            info, hit = kd[t], None
+            kuns = [k for k in info["kun"] if r in variants(kun_parts(k)[0])]
+            with_oku = [k for k in kuns if kun_parts(k)[1] and after.startswith(kun_parts(k)[1])]
+            ons = [o for o in info["on"] if r in variants(hira(o))]
+            if with_oku:
+                hit = with_oku[0]
+            elif ons:
+                hit = ons[0]
+            elif kuns:
+                bare = [k for k in kuns if not kun_parts(k)[1]]
+                hit = (bare or kuns)[0]
+            if hit:
+                use[t][hit] += 1
+            else:
+                unmatched += 1
+    return use, unmatched
+
+
+def build_readings(items_by_level, kd, use, report, errors):
+    out = {}
+    for lv, items in items_by_level.items():
+        out[lv] = []
+        for it in items:
+            k, u = it["k"], use.get(it["k"], {})
+            # leave out suffix-only on readings (-ノウ) and katakana words listed as kun (シリング, デシメートル)
+            info = dict(on=[o for o in kd[k]["on"] if "-" not in o],
+                        kun=[x for x in kd[k]["kun"] if not any("ァ" <= c <= "ヶ" for c in x)])
+            rank = lambda lst: sorted(lst, key=lambda x: (-u.get(x, 0), lst.index(x)))
+            on, kun, stems = rank(info["on"])[:READ_CAP_ON], [], set()
+            for x in rank(info["kun"]):          # one kun per stem (やす(む), not also やす(める))
+                if len(kun) < READ_CAP_KUN and kun_parts(x)[0] not in stems:
+                    kun.append(x); stems.add(kun_parts(x)[0])
+            rd = on + kun
+            shown = list(dict.fromkeys([hira(o) for o in on] + [kun_parts(x)[0] for x in kun]))
+            if not rd:
+                errors.append(f"{lv} {k}: no readings for the Readings cards")
+            out[lv].append(dict(
+                id="r:" + k, k=k, lv=lv, freq=it["freq"], strokes=it["strokes"], gloss=it["gloss"], gloss2=it["gloss2"],
+                rd=rd, shown=shown, keys=shown, on=info["on"], kun=info["kun"],
+                use={x: u[x] for x in info["on"] + info["kun"] if u.get(x)}, ex=it["ex"][:2]))
+        n = 0
+        for i, a in enumerate(out[lv]):
+            for b in out[lv][i + 1:]:
+                if set(a["shown"]) & set(b["keys"]):
+                    n += 1
+        report["Readings: clashing pairs per level (never share a board)"].append(f"{lv}: {n}")
+        report["Readings: kanji with no word use (first readings kept)"].append(
+            f"{lv}: {sum(1 for x in out[lv] if not x['use'])}")
+    return out
+
+
 def build(repo, out_dir, review_dir):
     report = collections.defaultdict(list)
     levels = load_levels(repo)
@@ -367,11 +461,21 @@ def build(repo, out_dir, review_dir):
         with open(os.path.join(out_dir, fn), "w", encoding="utf-8", newline="\n") as f:
             f.write(text + "\n")
         wfiles[lv] = dict(count=len(items), file=fn, sha=hashlib.sha256(text.encode()).hexdigest()[:10])
-    shas = [v["sha"] for v in files.values()] + [v["sha"] for v in wfiles.values()]
+    use, unmatched = reading_use(repo, kd, level_of)
+    report["Readings: split parts not matched to a KANJIDIC reading"].append(str(unmatched))
+    rfiles = {}
+    for lv, items in build_readings(items_by_level, kd, use, report, errors).items():
+        doc = dict(schema=1, deck="kanji-readings", level=lv, items=items)
+        text = json.dumps(doc, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        fn = f"readings_{lv}.json"
+        with open(os.path.join(out_dir, fn), "w", encoding="utf-8", newline="\n") as f:
+            f.write(text + "\n")
+        rfiles[lv] = dict(count=len(items), file=fn, sha=hashlib.sha256(text.encode()).hexdigest()[:10])
+    shas = [v["sha"] for v in files.values()] + [v["sha"] for v in wfiles.values()] + [v["sha"] for v in rfiles.values()]
     build_id = hashlib.sha256("".join(shas).encode()).hexdigest()[:8]
     meta = dict(
         schema=1, build=build_id, built=date.today().isoformat(),
-        levels=files, words=wfiles,
+        levels=files, words=wfiles, readings=rfiles,
         levelNames={"N5": "N5", "N4": "N4", "N3": "N3", "N2": "N2", "N1": "N1", "X": "Extras"},
         synonyms=synonyms,
         sources=dict(
@@ -379,7 +483,7 @@ def build(repo, out_dir, review_dir):
                            licence="CC BY-SA 4.0, EDRDG"),
             jmdict=dict(file="JMdict_e.gz", use="fallback example words", licence="CC BY-SA 4.0, EDRDG"),
             lists="kanji_list.xlsx; n5.txt–n1.txt",
-            words="jlpt_words.json (Nihongo Lab, CC BY-SA 4.0), deck word-reading"))
+            words="jlpt_words.json (Nihongo Lab, CC BY-SA 4.0), decks word-reading and word-kanji; reading use for kanji-readings"))
     with open(os.path.join(out_dir, "meta.json"), "w", encoding="utf-8", newline="\n") as f:
         json.dump(meta, f, ensure_ascii=False, indent=1, sort_keys=True)
         f.write("\n")

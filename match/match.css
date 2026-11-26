@@ -259,6 +259,9 @@ mark.hl { background: none; color: inherit; }
 .card.k.word:has(mark.hl) mark.hl { color: #b3261e; }
 .card.a mark.hl, .lp-gloss mark.hl, .chip .m mark.hl, .again .m mark.hl { color: #ffd479; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
 .lp-read .r.on { color: #ffd479; }
+/* deck A: a reading list on the answer card (on in katakana, kun in hiragana) */
+.card.a .gl.rds { font-size: clamp(12px, min(20cqh, 9cqw), 17px); line-height: 1.28; -webkit-line-clamp: 4; }
+.card.a .gl.rds .one { white-space: nowrap; }
 .lp-tile.word { font-size: 2rem; width: auto; padding: 0 .4rem; white-space: nowrap; }
 .segmented input:disabled + span { opacity: .45; cursor: not-allowed; }
 .segmented small { font-size: .75em; opacity: .75; margin-left: .4em; font-weight: 500; }

@@ -4,13 +4,14 @@
     'use strict';
 
     const C = window.MatchCore, S = window.MatchStore, Y = window.MatchSync, CLOUD = window.MatchCloud;
-    const APP_VERSION = '1.5';
+    const APP_VERSION = '1.6';
     const DECKS = {
         'kanji-meaning': { files: 'levels', front: 'kanji', back: 'meaning', items: ['kanji', 'kanji'] },
         'word-reading': { files: 'words', front: 'word', back: 'reading', items: ['word', 'words'] },
         // R6 deck B: the word with one kanji highlighted ↔ its reading with that kanji's part marked
         'word-kanji': { files: 'words', front: 'word', back: 'reading', items: ['word', 'words'], build: C.kanjiCards },
     };
+    DECKS['kanji-readings'] = { files: 'readings', front: 'kanji', back: 'readings', items: ['kanji', 'kanji'] };   // R7 deck A
     const isWordDeck = d => d === 'word-reading' || d === 'word-kanji';
     const LEVEL_NAMES = { N5: 'N5', N4: 'N4', N3: 'N3', N2: 'N2', N1: 'N1', X: 'Extras' };
     const DEFAULTS = { deck: 'kanji-meaning', level: 'N5', includeEasier: false, keepGoing: true, played: null, size: 12, showTimer: true, vibrate: true, wholeWord: false,
@@ -21,7 +22,7 @@
     const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
     const app = {
-        meta: null, synIdx: null, levels: { 'kanji-meaning': {}, 'word-reading': {}, 'word-kanji': {} }, byId: new Map(),
+        meta: null, synIdx: null, levels: { 'kanji-meaning': {}, 'word-reading': {}, 'word-kanji': {}, 'kanji-readings': {} }, byId: new Map(),
         span: [], inPlay: { levels: [], added: [] }, pool: [], reviewPool: [],
         store: null, saved: null, settings: Object.assign({}, DEFAULTS),
         recent: [], board: null, boardCount: 0, timer: null, lastShown: null,
@@ -50,9 +51,12 @@
     const fmtTime = ms => { const s = Math.round(ms / 1000); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
     const plural = (n, one, many) => `${n} ${n === 1 ? one : (many || one + 's')}`;
     const glossText = it => it.gloss + (it.gloss2 ? ', ' + it.gloss2 : '');
-    const backText = it => isWord(it) ? it.r : glossText(it);
+    const isReading = it => it.id.startsWith('r:');
+    const jaBack = it => isWord(it) || isReading(it);           // answer card text is Japanese
+    const backText = it => isWord(it) ? it.r : isReading(it) ? it.rd.join(' · ') : glossText(it);
     const playingText = () => app.inPlay.levels.length ? C.playingLabel(app.inPlay, LEVEL_NAMES) : LEVEL_NAMES[app.settings.level];
-    const choiceName = () => (isWordDeck(deck()) ? 'Words ' : '') + playingText();
+    const deckPrefix = () => (isWordDeck(deck()) ? 'Words ' : deck() === 'kanji-readings' ? 'Readings ' : '');
+    const choiceName = () => deckPrefix() + playingText();
     // PC keyboard layout (decision 9): both sides the same grid, key letters on the cards.
     const KEY_LAYOUT = '(hover: hover) and (pointer: fine) and (min-width: 700px)';
     // Off since R4 (Zachary 11/26: harder to know which key to press than expected). true turns it back on.
@@ -384,7 +388,7 @@
         const tl = $('trouble-list'); tl.textContent = '';
         trouble.forEach(it => {
             const c = el('span', 'chip');
-            c.append(marked('k', it.k, it.hk, true), marked('m', backText(it), it.hr, isWord(it)));
+            c.append(marked('k', it.k, it.hk, true), marked('m', backText(it), it.hr, jaBack(it)));
             tl.appendChild(c);
         });
 
@@ -475,11 +479,13 @@
     // ------------------------------------------------------------------ board
     // Side-by-side board (match.css): wide screens and landscape. R6: portrait tablets below 900 px stack, like phones.
     const WIDE_LAYOUT = '(min-width: 900px), (orientation: landscape) and (min-width: 560px)';
+    const NARROW = '(max-width: 559px)';
     const SHORT_LANDSCAPE = '(orientation: landscape) and (max-height: 500px) and (min-width: 560px)';
     function gridFor(n) {
         if (keyLayout()) { const c = C.keyCols(n), r = Math.ceil(n / c); return { kc: c, kr: r, ac: c, ar: r }; }
         const kc = n <= 6 ? 3 : 4;
-        const ac = (n <= 8 || window.matchMedia(SHORT_LANDSCAPE).matches) ? 2 : 3;
+        // R7: Readings cards hold up to 5 readings, so narrow portrait screens get 2 wider answer columns
+        const ac = (n <= 8 || window.matchMedia(SHORT_LANDSCAPE).matches || (deck() === 'kanji-readings' && window.matchMedia(NARROW).matches)) ? 2 : 3;
         return { kc, kr: Math.ceil(n / kc), ac, ar: Math.ceil(n / ac) };
     }
 
@@ -543,7 +549,11 @@
             const c = el('button', 'card a'); c.type = 'button';
             c.dataset.id = id; c.dataset.kind = 'a';
             c.setAttribute('aria-label', `${D().back}: ` + backText(it) + (it.hr ? `, marked ${it.r.slice(it.hr[0], it.hr[1])}` : '')); c.setAttribute('aria-pressed', 'false');
-            c.appendChild(marked('gl' + (isWord(it) ? ' rd' : ''), backText(it), it.hr, isWord(it)));
+            if (isReading(it)) {          // deck A: each reading kept whole on one line
+                const g = el('span', 'gl rds'); g.lang = 'ja';
+                it.rd.forEach((r, i) => { if (i) g.appendChild(document.createTextNode(' · ')); g.appendChild(el('span', 'one', r)); });
+                c.appendChild(g);
+            } else c.appendChild(marked('gl' + (isWord(it) ? ' rd' : ''), backText(it), it.hr, jaBack(it)));
             za.appendChild(c);
         });
         [[zk, km.k], [za, km.a]].forEach(([z, codes]) => Array.from(z.children).forEach((c, i) => {
@@ -559,8 +569,8 @@
         learn.textContent = '';
         learn.appendChild(el('p', 'learn-empty', `Tap a ${D().front}, then its ${D().back}.`));
         $('zone-kanji').setAttribute('aria-label', D().front === 'word' ? 'Words' : 'Kanji');
-        $('zone-answers').setAttribute('aria-label', D().back === 'reading' ? 'Readings' : 'Meanings');
-        $('bar-title').textContent = (B.mode === 'review' ? (isWordDeck(deck()) ? 'Words ' : '') + 'Review' : choiceName());
+        $('zone-answers').setAttribute('aria-label', D().back === 'meaning' ? 'Meanings' : 'Readings');
+        $('bar-title').textContent = (B.mode === 'review' ? deckPrefix() + 'Review' : choiceName());
         $('bar-timer').classList.toggle('hidden', !app.settings.showTimer);
         updateBar();
     }
@@ -643,6 +653,7 @@
         app.lastShown = id;
         const p = $('learn'); p.textContent = '';
         if (isWord(it)) { showLearnWord(it, p); return; }
+        if (isReading(it)) { showLearnReadings(it, p); return; }
         const lp = el('div', 'lp');
         const tile = el('div', 'lp-tile', it.k); tile.lang = 'ja'; lp.appendChild(tile);
         lp.appendChild(el('div', 'lp-gloss', glossText(it)));
@@ -666,6 +677,42 @@
         if (it.ex.length) {
             const ul = el('ul', 'lp-ex');
             it.ex.forEach(([w, r, en]) => {
+                const li = el('li');
+                const ws = el('span', 'w', w); ws.lang = 'ja';
+                const rs = el('span', 'rd', r); rs.lang = 'ja';
+                li.append(ws, rs, document.createTextNode(en));
+                ul.appendChild(li);
+            });
+            lp.appendChild(ul);
+        }
+        lp.appendChild(el('div', 'lp-meta', `${LEVEL_NAMES[it.lv]} kanji, ${plural(it.strokes, 'stroke')}`));
+        p.appendChild(lp);
+        p.scrollTop = 0;
+    }
+
+    // Deck A: the kanji, all its readings (the ones on the card first, highlighted), meaning, two example words.
+    function showLearnReadings(it, p) {
+        const lp = el('div', 'lp');
+        const tile = el('div', 'lp-tile', it.k); tile.lang = 'ja'; lp.appendChild(tile);
+        lp.appendChild(el('div', 'lp-gloss', glossText(it)));
+        const onCard = new Set(it.rd);
+        const rd = el('div', 'lp-read');
+        [['on', it.on, 'Chinese reading (on\'yomi)'], ['kun', it.kun, 'Japanese reading (kun\'yomi)']].forEach(([label, list, title]) => {
+            if (!list.length) return;
+            const lab = el('span', 'lab', label); lab.title = title; rd.appendChild(lab);
+            list.slice().sort((a, b) => (onCard.has(b) ? 1 : 0) - (onCard.has(a) ? 1 : 0)).forEach(r => {
+                const s = el('span', 'r' + (onCard.has(r) ? ' on' : ''), r); s.lang = 'ja'; rd.appendChild(s);
+            });
+        });
+        lp.appendChild(rd);
+        const partners = C.partnersOf(confusions(), it.id).map(pid => app.byId.get(pid)).filter(Boolean);
+        if (partners.length) {
+            const m = el('div', 'lp-mix', 'Easy to mix up with ' + partners.map(o => `${o.k} (${o.rd.join(' · ')})`).join(', ')); m.lang = 'ja';
+            lp.appendChild(m);
+        }
+        if (it.ex && it.ex.length) {
+            const ul = el('ul', 'lp-ex');
+            it.ex.slice(0, 2).forEach(([w, r, en]) => {
                 const li = el('li');
                 const ws = el('span', 'w', w); ws.lang = 'ja';
                 const rs = el('span', 'rd', r); rs.lang = 'ja';
@@ -776,7 +823,7 @@
             again.forEach(g => {
                 const it = app.byId.get(g.id);
                 const bt = el('button'); bt.type = 'button';
-                bt.append(marked('k', it.k, it.hk, true), marked('m', isWord(it) ? it.r : it.gloss, it.hr, isWord(it)));
+                bt.append(marked('k', it.k, it.hk, true), marked('m', isReading(it) ? backText(it) : isWord(it) ? it.r : it.gloss, it.hr, jaBack(it)));
                 bt.setAttribute('aria-label', `Show ${it.k}, ${backText(it)}`);
                 bt.addEventListener('click', () => { showLearn(g.id); $('learn').classList.add('open'); });
                 box.appendChild(bt);

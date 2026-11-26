@@ -1,6 +1,6 @@
 {
- "build": "43a7a82f",
- "built": "2026-11-25",
+ "build": "aa33d7ef",
+ "built": "2026-11-26",
  "levelNames": {
   "N1": "N1",
   "N2": "N2",
@@ -41,6 +41,38 @@
    "sha": "fa9e1638e1"
   }
  },
+ "readings": {
+  "N1": {
+   "count": 985,
+   "file": "readings_N1.json",
+   "sha": "0de2f97530"
+  },
+  "N2": {
+   "count": 380,
+   "file": "readings_N2.json",
+   "sha": "055945b889"
+  },
+  "N3": {
+   "count": 370,
+   "file": "readings_N3.json",
+   "sha": "c7d433ebed"
+  },
+  "N4": {
+   "count": 170,
+   "file": "readings_N4.json",
+   "sha": "5a748f36af"
+  },
+  "N5": {
+   "count": 80,
+   "file": "readings_N5.json",
+   "sha": "a22f5dce61"
+  },
+  "X": {
+   "count": 151,
+   "file": "readings_X.json",
+   "sha": "1da6fdf654"
+  }
+ },
  "schema": 1,
  "sources": {
   "jmdict": {
@@ -55,7 +87,7 @@
    "version": "3.6.2"
   },
   "lists": "kanji_list.xlsx; n5.txt–n1.txt",
-  "words": "jlpt_words.json (Nihongo Lab, CC BY-SA 4.0), deck word-reading"
+  "words": "jlpt_words.json (Nihongo Lab, CC BY-SA 4.0), decks word-reading and word-kanji; reading use for kanji-readings"
  },
  "synonyms": [
   [
