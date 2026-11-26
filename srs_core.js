@@ -1,5 +1,6 @@
 // Endless mode: the learning engine (pure logic, no DOM, no storage). v2 "Flow" (2.4: one-pass picker, round 10;
-// 2.5: several readings of one spelling, round 12; 2.6: STATS_LOG replaces LOG_KEEP, round 15).
+// 2.5: several readings of one spelling, round 12; 2.6: STATS_LOG replaces LOG_KEEP, round 15;
+// 2.7: a paused answer is judged on correctness alone, round 17).
 // Runs in the browser (window.SrsCore) and in Node for the tests (require('./srs_core.js')).
 //
 // It classes a typed answer (clean / slow / near miss / wrong / unknown), keeps a memory model per
@@ -279,8 +280,9 @@
         const ratio = (typeof ms === 'number' && !distracted) ? ms / ((timing.baseline || TUNING.BASELINE_DEFAULT) * mora) : null;
         const res = { kana, matched, mora, ratio, distracted, paused: !!timing.paused, trailingN };
         if (matched) {
-            if (distracted) res.cls = CLS.CLEAN;                       // judged on correctness alone
-            else if (timing.paused || (ratio !== null && ratio > TUNING.SLOW)) res.cls = CLS.SLOW;
+            // distracted (> 60 s) or paused (page hidden / window blurred): judged on correctness alone
+            if (distracted || timing.paused) { res.cls = CLS.CLEAN; res.ratio = null; }
+            else if (ratio !== null && ratio > TUNING.SLOW) res.cls = CLS.SLOW;
             else res.cls = CLS.CLEAN;
             return res;
         }
@@ -368,7 +370,8 @@
     function gradeFor(cls, ratio, opts = {}) {
         if (cls === CLS.WRONG || cls === CLS.UNKNOWN) return GRADE.AGAIN;
         if (cls === CLS.SLOW || cls === CLS.NEAR || cls === CLS.TYPO) return GRADE.HARD;
-        if (opts.firstSight) return GRADE.EASY;                         // known already: straight to memory
+        // known already: straight to memory; Easy only with speed evidence (a paused or distracted one is Good)
+        if (opts.firstSight) return ratio !== null && ratio !== undefined ? GRADE.EASY : GRADE.GOOD;
         if (opts.memory && ratio !== null && ratio !== undefined && ratio <= TUNING.FAST) return GRADE.EASY;
         return GRADE.GOOD;                                              // including a distracted clean answer
     }
