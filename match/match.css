@@ -103,6 +103,11 @@ summary { cursor: pointer; min-height: 40px; display: flex; align-items: center;
 }
 .chip .k { font-family: var(--ja-card); font-size: 1.35rem; }
 .chip .m { color: var(--muted); font-size: .85rem; }
+.account { margin-top: 1.4rem; }
+.account .row { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .9rem; }
+.account-status { margin: 0; font-size: .92rem; color: var(--muted); overflow-wrap: anywhere; }
+.account-status .who { color: var(--text); font-weight: 600; }
+.account .hint.error { color: #f3a3a3; }
 .options { border-top: 1px solid var(--line); margin-top: 1.4rem; padding-top: .4rem; }
 .backup .row { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .5rem; }
 .confirm { margin-top: .8rem; padding: .8rem; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }

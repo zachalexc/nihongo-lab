@@ -3,8 +3,8 @@
 (function () {
     'use strict';
 
-    const C = window.MatchCore, S = window.MatchStore;
-    const APP_VERSION = '1.3';
+    const C = window.MatchCore, S = window.MatchStore, Y = window.MatchSync, CLOUD = window.MatchCloud;
+    const APP_VERSION = '1.4';
     const DECKS = {
         'kanji-meaning': { files: 'levels', front: 'kanji', back: 'meaning', items: ['kanji', 'kanji'] },
         'word-reading': { files: 'words', front: 'word', back: 'reading', items: ['word', 'words'] },
@@ -22,6 +22,7 @@
         span: [], inPlay: { levels: [], added: [] }, pool: [], reviewPool: [],
         store: null, saved: null, settings: Object.assign({}, DEFAULTS),
         recent: [], board: null, boardCount: 0, timer: null, lastShown: null,
+        sync: null, syncPending: false,
     };
     if (params.has('test')) window.__match = app;
 
@@ -125,6 +126,51 @@
             app.settings.persistAsked = true; saveSettings();
             navigator.storage.persist().catch(() => {});
         }
+        startSync();
+    }
+
+    // ------------------------------------------------------------------ sign-in and sync (R5)
+    function startSync() {
+        if (!Y || !CLOUD) { $('account').classList.add('hidden'); return; }
+        app.sync = Y.controller({ cloud: CLOUD, store: app.store, onStatus: renderAccount, onApplied: syncApplied });
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') app.sync.hidden(); });
+        window.addEventListener('pagehide', () => app.sync.hidden());
+        window.addEventListener('online', () => app.sync.online());
+        app.sync.start();
+    }
+    // Merged progress from the cloud was saved: show it (after the board, if one is being played).
+    async function syncApplied() {
+        if (app.board && !app.board.done) { app.syncPending = true; return; }
+        await reloadSaved();
+    }
+    async function reloadSaved() {
+        app.syncPending = false;
+        app.saved = await app.store.load();
+        Object.assign(app.settings, DEFAULTS, app.saved.settings || {});
+        migrateSettings();
+        if (!app.settings.played) derivePlayed();
+        loadRecent();
+        applySettingsToForm();
+        if (!$('home').classList.contains('hidden')) renderHome();
+    }
+    function renderAccount(st) {
+        const btn = $('signin-btn'), out = $('signout-btn'), line = $('account-status'), hint = $('account-hint');
+        const signedIn = !!st.user && st.state !== 'signed-out';
+        btn.classList.toggle('hidden', signedIn);
+        btn.disabled = st.state === 'loading';
+        btn.textContent = st.state === 'loading' ? 'Signing in…' : 'Sign in to keep your progress';
+        out.classList.toggle('hidden', !signedIn);
+        line.classList.toggle('hidden', !signedIn);
+        line.textContent = '';
+        if (signedIn) {
+            line.appendChild(el('span', 'who', st.user.email || 'Signed in'));
+            const at = st.at ? new Date(st.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+            const what = { syncing: 'Syncing…', synced: 'Synced · ' + at, offline: 'Offline, will retry',
+                           error: "Couldn't sync", loading: 'Signing in…' }[st.state] || '';
+            line.appendChild(document.createTextNode(' · ' + what));
+        }
+        hint.textContent = st.message || (signedIn ? '' : 'Google sign-in, the same as Endless. Your progress then follows you to other devices.');
+        hint.classList.toggle('error', st.state === 'error');
     }
 
     // v1/R3 settings: size 8 → 12 (decision 8); v1 "include lower levels" → Include easier levels.
@@ -136,6 +182,8 @@
         if (typeof st.includeEasier !== 'boolean') st.includeEasier = false;
         delete st.includeLower;
         if (typeof st.keepGoing !== 'boolean') st.keepGoing = true;
+        // R5: settings saved before sync count as chosen long ago (1), a fresh browser's defaults as never (0).
+        if (typeof st.upd !== 'number') st.upd = Object.keys(saved).some(k => !['persistAsked', 'iosTipDismissed', 'played'].includes(k)) ? 1 : 0;
     }
 
     function derivePlayed() {
@@ -147,6 +195,12 @@
     }
 
     function saveSettings() { app.store.saveSettings(app.settings).catch(() => {}); }
+    // A change the user made: newest settings win when two devices sync (decision 10).
+    function touchSettings() {
+        app.settings.upd = Date.now(); delete app.settings.by;
+        saveSettings();
+        if (app.sync) app.sync.settingsChanged();
+    }
 
     function applySettingsToForm() {
         const f = $('setup');
@@ -170,20 +224,22 @@
             if (e.target.name === 'deck') { app.settings.deck = e.target.value; loadRecent(); }
             if (e.target.id === 'keep-going') app.settings.keepGoing = e.target.checked;
             if (e.target.id === 'include-easier') app.settings.includeEasier = e.target.checked;
-            saveSettings(); renderHome();
+            touchSettings(); renderHome();
         });
         f.addEventListener('submit', e => { e.preventDefault(); startBoard('play'); });
         $('review-btn').addEventListener('click', () => startBoard('review'));
         $('next-level-btn').addEventListener('click', () => {
             const nx = C.nextLevel(app.settings.level); if (!nx) return;
-            app.settings.level = nx; applySettingsToForm(); saveSettings(); renderHome();
+            app.settings.level = nx; applySettingsToForm(); touchSettings(); renderHome();
         });
-        $('opt-timer').addEventListener('change', e => { app.settings.showTimer = e.target.checked; saveSettings(); });
-        $('opt-vibrate').addEventListener('change', e => { app.settings.vibrate = e.target.checked; saveSettings(); });
+        $('opt-timer').addEventListener('change', e => { app.settings.showTimer = e.target.checked; touchSettings(); });
+        $('opt-vibrate').addEventListener('change', e => { app.settings.vibrate = e.target.checked; touchSettings(); });
         $('export-btn').addEventListener('click', exportProgress);
         $('import-file').addEventListener('change', importProgress);
         $('reset-btn').addEventListener('click', confirmReset);
         $('ios-tip-close').addEventListener('click', () => { app.settings.iosTipDismissed = true; saveSettings(); $('ios-tip').classList.add('hidden'); });
+        $('signin-btn').addEventListener('click', () => app.sync && app.sync.signIn());
+        $('signout-btn').addEventListener('click', () => app.sync && app.sync.signOut());
     }
 
     async function renderHome() {
@@ -340,6 +396,7 @@
             if (!app.settings.played) derivePlayed();
             loadRecent();
             applySettingsToForm(); closeConfirm(); showWarning('Backup imported.'); renderHome();
+            if (app.sync) app.sync.boardDone();
         };
     }
 
@@ -349,7 +406,8 @@
         const no = el('button', 'btn small', 'Cancel');
         yes.type = no.type = 'button'; yes.disabled = true;
         input.oninput = () => { yes.disabled = input.value.trim().toLowerCase() !== 'reset'; };
-        confirmBox([el('p', null, 'This deletes all progress, bests and history in this browser. Export a backup first if you might want it back. Type "reset" to confirm.'), input, yes, no]);
+        const cloudNote = app.sync && app.sync.user() ? " You're signed in: the copy in the cloud is kept, and comes back here at the next sync." : '';
+        confirmBox([el('p', null, 'This deletes all progress, bests and history in this browser.' + cloudNote + ' Export a backup first if you might want it back. Type "reset" to confirm.'), input, yes, no]);
         input.focus();
         no.onclick = closeConfirm;
         yes.onclick = async () => {
@@ -372,6 +430,7 @@
 
     async function startBoard(mode) {
         let pool;
+        if (app.syncPending) await reloadSaved();
         try { await planPool(); } catch (e) { showWarning(e.message); return; }
         pool = mode === 'review' ? app.reviewPool : app.pool;
         const seed = TEST_SEED !== null ? TEST_SEED + app.boardCount : ((Date.now() ^ (Math.random() * 4294967296)) >>> 0);
@@ -628,6 +687,7 @@
         app.saved.days = (await app.store.load()).days;
         app.saved.meta = (await app.store.load()).meta;
         app.recent.unshift(B.ids); app.recent.length = Math.min(app.recent.length, 3);
+        if (app.sync) app.sync.boardDone();
 
         if (abandoned) { goHome(); return; }
         showSummary(result, r.grades, newBest, prevBest, saveError);
@@ -686,6 +746,7 @@
     function goHome() {
         clearInterval(app.timer);
         app.board = null;
+        if (app.syncPending) { reloadSaved(); }
         $('play').classList.add('hidden');
         $('home').classList.remove('hidden');
         renderHome();

@@ -213,7 +213,9 @@
         }
         return out;
     }
-    function updateConfusions(prev, record, grades, today) {
+    // now (optional): stamps upd on every pair that changed (cloud sync merges pairs by latest upd);
+    // a changed pair drops `by` (the device that last wrote it, kept only for sync tie-breaks).
+    function updateConfusions(prev, record, grades, today, now) {
         const conf = {};
         for (const k in prev) conf[k] = Object.assign({}, prev[k], { cleanDays: prev[k].cleanDays.slice() });
         const confusedNow = new Set();
@@ -222,6 +224,7 @@
             const [a, b] = key.split('|');
             const c = conf[key] || (conf[key] = { a, b, count: 0, lastDay: today, cleanDays: [] });
             c.count++; c.lastDay = today; c.cleanDays = [];
+            if (now) { c.upd = now; delete c.by; }
             confusedNow.add(key);
         });
         if (!record.abandoned) {
@@ -231,7 +234,7 @@
                 if (!isActive(c) || confusedNow.has(key) || !onBoard.has(c.a) || !onBoard.has(c.b)) continue;
                 const ga = grades[c.a] && grades[c.a].grade, gb = grades[c.b] && grades[c.b].grade;
                 if (ga === GRADE.MISSED || gb === GRADE.MISSED || ga === null || gb === null) continue;
-                if (!c.cleanDays.includes(today)) c.cleanDays.push(today);
+                if (!c.cleanDays.includes(today)) { c.cleanDays.push(today); if (now) { c.upd = now; delete c.by; } }
             }
         }
         return conf;
@@ -241,13 +244,14 @@
     // confusion map and the per-item grades.
     function applyBoard({ record, states, confusions, today, now }) {
         const grades = gradeBoard(record);
-        const conf = updateConfusions(confusions || {}, record, grades, today);
+        const conf = updateConfusions(confusions || {}, record, grades, today, now);
         const changed = {};
         for (const id of record.ids) {
             const g = grades[id];
             if (g.grade === null) continue;
             const cap = partnersOf(conf, id).length ? TUNING.CONFUSION_BOX_CAP : null;
             changed[id] = applyGrade(states[id], g.grade, today, now, { cap, kSide: g.kSide });
+            delete changed[id].by;           // a local change: this device wrote it (sync tie-breaks)
         }
         return { grades, confusions: conf, changed };
     }

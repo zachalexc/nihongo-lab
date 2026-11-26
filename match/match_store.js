@@ -6,6 +6,7 @@
 //   await store.load()            → { meta, settings, items, confusions, bests, days, log }
 //   await store.saveBoard({ deck, items, confusions, bests, day, result })
 //   await store.saveSettings(settings) / store.saveMeta(patch)
+//   await store.applySync(merged => …)    (cloud sync: write merged progress, never the log)
 //   await store.exportAll() → object;  await store.importAll(object);  await store.reset()
 (function (root, factory) {
     if (typeof module === 'object' && module.exports) module.exports = factory();
@@ -37,6 +38,14 @@
             get length() { return m.size; },
             _map: m,
         };
+    }
+
+    // JSON with sorted keys, to compare data whatever order its keys were built in
+    function stable(v) {
+        if (Array.isArray(v)) return '[' + v.map(stable).join(',') + ']';
+        if (v && typeof v === 'object') return '{' + Object.keys(v).sort().filter(k => v[k] !== undefined)
+            .map(k => JSON.stringify(k) + ':' + stable(v[k])).join(',') + '}';
+        return JSON.stringify(v === undefined ? null : v);
     }
 
     function isQuota(e) {
@@ -116,6 +125,21 @@
             ]);
         }
 
+        // Cloud sync (match_sync.js): fn(current) returns the merged { settings, bests, days, items, confusions };
+        // changed parts are written in the same call (no await in between, so nothing saved meanwhile is lost).
+        // The log and meta are never touched. Returns true if anything changed.
+        async function applySync(fn) {
+            const cur = { settings: read('settings', {}), bests: read('bests', {}), days: read('days', {}), items: {}, confusions: {} };
+            DECKS.forEach(d => { cur.items[d] = read('items.' + d, {}); cur.confusions[d] = read('confusions.' + d, {}); });
+            const m = fn(cur);
+            const pairs = [];
+            const add = (key, a, b) => { if (stable(a) !== stable(b)) pairs.push([key, b]); };
+            add('settings', cur.settings, m.settings); add('bests', cur.bests, m.bests); add('days', cur.days, m.days);
+            DECKS.forEach(d => { add('items.' + d, cur.items[d], m.items[d]); add('confusions.' + d, cur.confusions[d], m.confusions[d]); });
+            writeAll(pairs);
+            return pairs.length > 0;
+        }
+
         async function saveSettings(settings) { write('settings', settings); }
         async function saveMeta(patch) { write('meta', Object.assign(meta(), patch)); }
 
@@ -162,12 +186,12 @@
             keys.forEach(k => storage.removeItem(k));
         }
 
-        return { load, saveBoard, saveSettings, saveMeta, exportAll, importAll, summary, reset, validate,
+        return { load, saveBoard, saveSettings, saveMeta, applySync, exportAll, importAll, summary, reset, validate,
                  _storage: storage };
     }
 
     return {
-        PREFIX, SCHEMA, FORMAT, LOG_KEEP, uuid, memoryStorage, create,
+        PREFIX, SCHEMA, FORMAT, LOG_KEEP, uuid, memoryStorage, create, stable,
         local: () => create(window.localStorage),
         memory: () => create(memoryStorage()),
     };

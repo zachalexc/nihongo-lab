@@ -13,7 +13,7 @@
     <link rel="icon" href="icon-192.png" type="image/png">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="match.css?v=1.4">
+    <link rel="stylesheet" href="match.css?v=1.5">
 </head>
 <body>
 <main id="app">
@@ -85,6 +85,15 @@
             </details>
         </section>
 
+        <section id="account" class="account" aria-label="Sign-in and sync">
+            <div class="row">
+                <button type="button" class="btn small" id="signin-btn">Sign in to keep your progress</button>
+                <p id="account-status" class="account-status hidden" role="status"></p>
+                <button type="button" class="btn small hidden" id="signout-btn">Sign out</button>
+            </div>
+            <p id="account-hint" class="hint"></p>
+        </section>
+
         <details class="options">
             <summary>Options and backup</summary>
             <label class="check"><input type="checkbox" id="opt-timer" checked> Show the timer during a board</label>
@@ -140,8 +149,10 @@
     </section>
 </main>
 
-<script src="match_core.js?v=1.2"></script>
-<script src="match_store.js?v=1.1"></script>
-<script src="match.js?v=1.3"></script>
+<script src="match_core.js?v=1.3"></script>
+<script src="match_store.js?v=1.2"></script>
+<script src="match_sync.js?v=1.0"></script>
+<script src="match_cloud.js?v=1.0"></script>
+<script src="match.js?v=1.4"></script>
 </body>
 </html>
