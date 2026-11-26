@@ -270,28 +270,36 @@ def reading_use(repo, kd, level_of):
     src = json.load(open(os.path.join(repo, "jlpt_words.json"), encoding="utf-8"))
     col = {f: i for i, f in enumerate(src["fields"])}
     use = collections.defaultdict(collections.Counter)
-    unmatched = 0
+    unmatched, moved = 0, [0]
     for row in src["rows"]:
         parts = [x.partition(":") for x in (row[col["split"]] or "").split(";") if x]
         for i, (t, colon, r) in enumerate(parts):
             if not colon or len(t) != 1 or t not in level_of or t not in kd:
                 continue
             after = "".join(x[0] for x in parts[i + 1:] if not x[1])[:4]     # okurigana that follows
-            info, hit = kd[t], None
-            kuns = [k for k in info["kun"] if r in variants(kun_parts(k)[0])]
-            with_oku = [k for k in kuns if kun_parts(k)[1] and after.startswith(kun_parts(k)[1])]
-            ons = [o for o in info["on"] if r in variants(hira(o))]
-            if with_oku:
-                hit = with_oku[0]
-            elif ons:
-                hit = ons[0]
-            elif kuns:
-                bare = [k for k in kuns if not kun_parts(k)[1]]
-                hit = (bare or kuns)[0]
+            info = kd[t]
+
+            def pick(match):                    # R8: called with exact match first, then rendaku / small っ
+                kuns = [k for k in info["kun"] if match(kun_parts(k)[0])]
+                with_oku = [k for k in kuns if kun_parts(k)[1] and after.startswith(kun_parts(k)[1])]
+                ons = [o for o in info["on"] if match(hira(o))]
+                if with_oku:
+                    return with_oku[0]
+                if ons:
+                    return ons[0]
+                if kuns:
+                    bare = [k for k in kuns if not kun_parts(k)[1]]
+                    return (bare or kuns)[0]
+                return None
+            hit = pick(lambda h: h == r) or pick(lambda h: r in variants(h))
+            old = pick(lambda h: r in variants(h))
+            if hit and old and hit != old:
+                moved[0] += 1
             if hit:
                 use[t][hit] += 1
             else:
                 unmatched += 1
+    reading_use.moved = moved[0]
     return use, unmatched
 
 
@@ -304,11 +312,25 @@ def build_readings(items_by_level, kd, use, report, errors):
             # leave out suffix-only on readings (-ノウ) and katakana words listed as kun (シリング, デシメートル)
             info = dict(on=[o for o in kd[k]["on"] if "-" not in o],
                         kun=[x for x in kd[k]["kun"] if not any("ァ" <= c <= "ヶ" for c in x)])
-            rank = lambda lst: sorted(lst, key=lambda x: (-u.get(x, 0), lst.index(x)))
-            on, kun, stems = rank(info["on"])[:READ_CAP_ON], [], set()
-            for x in rank(info["kun"]):          # one kun per stem (やす(む), not also やす(める))
-                if len(kun) < READ_CAP_KUN and kun_parts(x)[0] not in stems:
-                    kun.append(x); stems.add(kun_parts(x)[0])
+            # R8 decision 20: kun with the same stem, or the same full kana, form one group
+            groups = []
+            for x in info["kun"]:
+                st, ok = kun_parts(x)
+                g = next((g for g in groups if any(kun_parts(y)[0] == st or "".join(kun_parts(y)) == st + ok
+                                                   for y in g)), None)
+                if g is None:
+                    groups.append([x])
+                else:
+                    g.append(x)
+            gsum = lambda g: sum(u.get(y, 0) for y in g)
+            gform = lambda g: sorted(g, key=lambda y: (-u.get(y, 0), g.index(y)))[0]
+            on = sorted(info["on"], key=lambda x: (-u.get(x, 0), info["on"].index(x)))
+            groups.sort(key=lambda g: (-gsum(g), info["kun"].index(g[0])))
+            # R8 decision 19: only used readings when the kanji has any
+            if any(u.get(x, 0) for x in info["on"]) or any(gsum(g) for g in groups):
+                on = [x for x in on if u.get(x, 0)]
+                groups = [g for g in groups if gsum(g)]
+            on, kun = on[:READ_CAP_ON], [gform(g) for g in groups[:READ_CAP_KUN]]
             rd = on + kun
             shown = list(dict.fromkeys([hira(o) for o in on] + [kun_parts(x)[0] for x in kun]))
             if not rd:
@@ -463,6 +485,7 @@ def build(repo, out_dir, review_dir):
         wfiles[lv] = dict(count=len(items), file=fn, sha=hashlib.sha256(text.encode()).hexdigest()[:10])
     use, unmatched = reading_use(repo, kd, level_of)
     report["Readings: split parts not matched to a KANJIDIC reading"].append(str(unmatched))
+    report["Readings: split parts moved to another reading by exact match (R8)"].append(str(reading_use.moved))
     rfiles = {}
     for lv, items in build_readings(items_by_level, kd, use, report, errors).items():
         doc = dict(schema=1, deck="kanji-readings", level=lv, items=items)

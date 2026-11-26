@@ -1,5 +1,5 @@
 {
- "build": "aa33d7ef",
+ "build": "e2b8a604",
  "built": "2026-11-26",
  "levelNames": {
   "N1": "N1",
@@ -45,32 +45,32 @@
   "N1": {
    "count": 985,
    "file": "readings_N1.json",
-   "sha": "0de2f97530"
+   "sha": "05256236ba"
   },
   "N2": {
    "count": 380,
    "file": "readings_N2.json",
-   "sha": "055945b889"
+   "sha": "c47ecd5dd7"
   },
   "N3": {
    "count": 370,
    "file": "readings_N3.json",
-   "sha": "c7d433ebed"
+   "sha": "3c8513bcff"
   },
   "N4": {
    "count": 170,
    "file": "readings_N4.json",
-   "sha": "5a748f36af"
+   "sha": "3d4eb41d57"
   },
   "N5": {
    "count": 80,
    "file": "readings_N5.json",
-   "sha": "a22f5dce61"
+   "sha": "daeebaf4c4"
   },
   "X": {
    "count": 151,
    "file": "readings_X.json",
-   "sha": "1da6fdf654"
+   "sha": "93a26c47bc"
   }
  },
  "schema": 1,

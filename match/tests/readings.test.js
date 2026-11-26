@@ -27,32 +27,44 @@ test('one Readings card per kanji, same levels as Meaning, own ids', () => {
     }
 });
 
-test('cap 2 on + 3 kun (one kun per stem), on first, ordered by use in the word data, ties in data order', () => {
+// R8 decisions 18-20: exact match first, only used readings, kun grouped by stem
+test('cap 2 on + 3 kun groups, on first; only used readings when a kanji has any; no use fills from data order', () => {
     for (const it of all) {
         const on = it.rd.filter(isKata), kun = it.rd.filter(r => !isKata(r));
+        const u = x => it.use[x] || 0;
         assert.ok(it.rd.length > 0, it.k);
         assert.deepEqual(it.rd, on.concat(kun), it.k + ' on first');
         assert.ok(on.length <= 2 && kun.length <= 3, it.k);
         on.forEach(r => assert.ok(it.on.includes(r))); kun.forEach(r => assert.ok(it.kun.includes(r)));
         assert.equal(new Set(kun.map(stem)).size, kun.length, it.k + ' one kun per stem');
-        assert.equal(on.length, Math.min(2, it.on.length), it.k);
-        const u = x => it.use[x] || 0;
-        // order by use, ties by data order
-        const ok = (list, src) => list.every((x, i) => i === 0 || u(list[i - 1]) > u(x) || (u(list[i - 1]) === u(x) && src.indexOf(list[i - 1]) < src.indexOf(x)));
-        assert.ok(ok(on, it.on), it.k); assert.ok(ok(kun, it.kun), it.k);
-        // nothing left out that is used more than something shown
-        const minOn = Math.min(...on.map(u)); it.on.filter(x => !on.includes(x)).forEach(x => assert.ok(u(x) <= minOn, it.k + ' ' + x));
-        // shown = hiragana, okurigana dropped
+        const used = Object.keys(it.use).length > 0;
+        if (used) it.rd.forEach(r => assert.ok(u(r) > 0 || it.kun.some(y => stem(y) === stem(r) && u(y) > 0), it.k + ' unused shown: ' + r));
+        else assert.deepEqual(on, it.on.slice(0, 2), it.k + ' no use: first readings');
         assert.deepEqual(it.shown, [...new Set(on.map(hira).concat(kun.map(stem)))], it.k);
         assert.deepEqual(it.keys, it.shown);
         assert.ok(it.ex.length <= 2);
     }
     assert.deepEqual(byK.get('休').rd, ['キュウ', 'やす(む)']);
     assert.deepEqual(byK.get('人').rd, ['ジン', 'ニン', 'ひと']);
-    assert.deepEqual(byK.get('上').rd.slice(0, 2), ['ジョウ', 'ショウ']);
-    const noUse = all.filter(it => !Object.keys(it.use).length);
-    noUse.forEach(it => assert.deepEqual(it.rd.filter(isKata), it.on.slice(0, 2), it.k + ' no use: first readings'));
-    console.log(`  Readings: ${all.length} cards; ${noUse.length} kanji have no word use (first readings kept)`);
+});
+
+test('exact match beats a voiced variant (地震 地:じ counts as ジ)', () => {
+    const t = byK.get('地');
+    assert.ok((t.use['ジ'] || 0) > 0); assert.ok(t.rd.includes('ジ'));
+});
+
+test('unused readings hidden when a used one exists (手 ズ, 思 おもえら(く), 結 ケチ)', () => {
+    assert.deepEqual(byK.get('手').rd, ['シュ', 'て']);
+    assert.deepEqual(byK.get('思').rd, ['シ', 'おも(う)']);
+    assert.ok(!byK.get('結').rd.includes('ケチ'));
+});
+
+test('kun grouped by stem: use summed, most-used form shown; identical kana merged (代 か(わる)/かわ(る))', () => {
+    const d = byK.get('代');
+    assert.equal(d.rd.filter(r => r === 'か(わる)' || r === 'かわ(る)').length, 1);
+    const up = byK.get('上'), forms = up.kun.filter(y => stem(y) === 'あ');
+    const shownA = up.rd.find(r => stem(r) === 'あ');
+    assert.ok(shownA); forms.forEach(y => assert.ok((up.use[shownA] || 0) >= (up.use[y] || 0)));
 });
 
 test('clash: any shared reading (hiragana, okurigana dropped) keeps two kanji off one board', () => {
