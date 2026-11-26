@@ -19,17 +19,20 @@ const W = (k, r, split, kanji, alt = []) => ({ id: `w:${k}|${r}`, k, r, alt, spl
 const mark = c => [c.k.slice(c.hk[0], c.hk[1]), c.r.slice(c.hr[0], c.hr[1])];
 
 test('cards: one per kanji part; highlight and reading part for 1–3 kanji, okurigana, 々, read-together parts', () => {
-    const one = C.kanjiCards([W('思う', 'おもう', '思:おも;う', ['思'])]);
-    assert.deepEqual(one.map(mark), [['思', 'おも']]);
+    assert.deepEqual(C.kanjiCards([W('思う', 'おもう', '思:おも;う', ['思'])]), [], 'one-kanji words stay in deck C (decision 16)');
+    assert.deepEqual(C.kanjiCards([W('人', 'ひと', '人:ひと', ['人'])]), []);
     const two = C.kanjiCards([W('自分', 'じぶん', '自:じ;分:ぶん', ['自', '分'])]);
     assert.deepEqual(two.map(c => c.id), ['h:自分|じぶん|自', 'h:自分|じぶん|分']);
     assert.deepEqual(two.map(mark), [['自', 'じ'], ['分', 'ぶん']]);
     const three = C.kanjiCards([W('図書館', 'としょかん', '図:と;書:しょ;館:かん', ['図', '書', '館'])]);
     assert.deepEqual(three.map(mark), [['図', 'と'], ['書', 'しょ'], ['館', 'かん']]);
-    const rep = C.kanjiCards([W('色々', 'いろいろ', '色:いろ;々:いろ', ['色'])]);
-    assert.deepEqual(rep.map(mark), [['色', 'いろ']], '々 is never a target');
-    const mid = C.kanjiCards([W('お茶', 'おちゃ', 'お;茶:ちゃ', ['茶'])]);
-    assert.deepEqual(mid.map(mark), [['茶', 'ちゃ']]);
+    assert.deepEqual(C.kanjiCards([W('色々', 'いろいろ', '色:いろ;々:いろ', ['色'])]), [], '々 is not a second kanji');
+    const rep = C.kanjiCards([W('時々刻々', 'じじこっこく', '時:じ;々:じ;刻:こっ;々:こく', ['時', '刻'])]);
+    assert.deepEqual(rep.map(mark), [['時', 'じ'], ['刻', 'こっ']], '々 is never a target');
+    const mid = C.kanjiCards([W('お茶会', 'おちゃかい', 'お;茶:ちゃ;会:かい', ['茶', '会'])]);
+    assert.deepEqual(mid.map(mark), [['茶', 'ちゃ'], ['会', 'かい']], 'kana parts stay unmarked');
+    const oku = C.kanjiCards([W('落ち着く', 'おちつく', '落:お;ち;着:つ;く', ['落', '着'])]);
+    assert.deepEqual(oku.map(mark), [['落', 'お'], ['着', 'つ']], 'okurigana unmarked');
     const grp = C.kanjiCards([W('日本', 'にほん', '日本:にほん', ['日', '本'])]);
     assert.deepEqual(grp.map(mark), [['日本', 'にほん']], 'a part read together is one card');
     assert.deepEqual(C.kanjiCards([W('変', 'へん', '変:ちがう', ['変'])]), [], "a split that doesn't spell the reading gives no card");
@@ -37,11 +40,12 @@ test('cards: one per kanji part; highlight and reading part for 1–3 kanji, oku
     assert.deepEqual([...two[0].keys].sort(), ['#自分', 'じぶん']); assert.equal(two[0].wid, 'w:自分|じぶん');
 });
 
-test('cards from the real data: every word has at least one card, ids unique, marks spell the word', () => {
+test('cards from the real data: every 2+ kanji word has a card, no one-kanji word does, ids unique, marks spell the word', () => {
     const ids = new Set();
     for (const lv of C.LEVEL_ORDER) {
         const wids = new Set(cards[lv].map(c => c.wid));
-        words[lv].forEach(w => assert.ok(wids.has(w.id), w.id));
+        words[lv].forEach(w => assert.equal(wids.has(w.id), w.kanji.length >= 2, w.id));
+        console.log(`  ${lv}: ${words[lv].filter(w => w.kanji.length >= 2).length} words → ${cards[lv].length} cards`);
         for (const c of cards[lv]) {
             assert.ok(!ids.has(c.id), c.id); ids.add(c.id);
             const [k, r] = mark(c);
@@ -57,7 +61,7 @@ test('cards from the real data: every word has at least one card, ids unique, ma
 test('clash: a word at most once per board; identical readings (incl. alternatives) clash; others do not', () => {
     const [a, b] = C.kanjiCards([W('自分', 'じぶん', '自:じ;分:ぶん', ['自', '分'])]);
     assert.ok(C.clash(a, b, synIdx), 'same word, other kanji');
-    const [h1] = C.kanjiCards([W('橋', 'はし', '橋:はし', ['橋'])]), [h2] = C.kanjiCards([W('箸', 'はし', '箸:はし', ['箸'])]);
+    const [h1] = C.kanjiCards([W('記者', 'きしゃ', '記:き;者:しゃ', ['記', '者'])]), [h2] = C.kanjiCards([W('汽車', 'きしゃ', '汽:き;車:しゃ', ['汽', '車'])]);
     assert.ok(C.clash(h1, h2, synIdx), 'homophones');
     const [n1] = C.kanjiCards([W('日本', 'にほん', '日本:にほん', ['日', '本'], ['にっぽん'])]);
     const [n2] = C.kanjiCards([W('日歩', 'にっぽん', '日:にっ;歩:ぽん', ['日', '歩'])]);

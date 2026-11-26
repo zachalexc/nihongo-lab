@@ -98,9 +98,12 @@
     // A part that reads several kanji together (日本:にほん, 今日:きょう) is one card with all of them
     // highlighted. 々 is never a target. hk / hr = [start, end) of the highlight in k / the mark in r.
     // Words whose split doesn't spell the word and its reading get no cards.
+    // R7 (decision 16): only words with 2 or more kanji (々 not counted); one-kanji words stay in deck C.
+    // A word whose kanji are read together (日本:にほん) is kept as one card (decision 17).
     function kanjiCards(words) {
         const out = [];
         for (const w of words || []) {
+            if (!w.kanji || w.kanji.length < 2) continue;
             const parts = splitParts(w.split);
             if (!parts.length || parts.map(p => p.t).join('') !== w.k || parts.map(p => p.r).join('') !== w.r) continue;
             const ks = new Set(w.kanji), done = new Set();
