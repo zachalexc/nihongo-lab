@@ -21,6 +21,18 @@ service cloud.firestore {
       allow read, delete: if owner();
       allow create, update: if owner() && (chunkOk(request.resource.data) || metaOk(request.resource.data));
     }
+    // Kanji Match sync (match/match_sync.js): users/{uid}/match/{meta | settings | deck-<deckId>}.
+    // meta: { v, mt }; settings and deck-…: { v, mt, d (JSON string, ≤ 900,000 characters) }. Owner only.
+    match /users/{uid}/match/{doc} {
+      function matchOwner() { return request.auth != null && request.auth.uid == uid; }
+      function matchOk(d) {
+        return doc.matches('meta|settings|deck-[a-z-]+') && d.keys().hasOnly(['v', 'mt', 'd'])
+          && d.v == 1 && d.mt is int
+          && ((doc == 'meta' && !('d' in d)) || (doc != 'meta' && d.d is string && d.d.size() <= 900000));
+      }
+      allow read: if matchOwner();
+      allow create, update: if matchOwner() && matchOk(request.resource.data);
+    }
     match /{document=**} {
       allow read, write: if false;
     }
