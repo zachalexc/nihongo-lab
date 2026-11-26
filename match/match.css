@@ -58,7 +58,7 @@ button, input { font: inherit; color: inherit; }
 /* ------------------------------------------------------------------ home */
 #home { max-width: 620px; margin: 0 auto; padding: 1.25rem 1.25rem 3rem; }
 .home-head { margin-bottom: 1.25rem; }
-.back-link { font-size: .9rem; color: var(--muted); text-decoration: none; }
+.back-link { display: inline-block; font-size: .95rem; font-weight: 600; color: var(--accent); text-decoration: none; padding: .35rem 0; }
 .back-link:hover { color: var(--text); text-decoration: underline; }
 h1 { font-size: 2.1rem; line-height: 1.15; margin: .35rem 0 .4rem; letter-spacing: -0.02em; font-weight: 700; }
 h2 { font-size: 1.05rem; margin: 0 0 .75rem; font-weight: 600; }
@@ -241,4 +241,31 @@ summary { cursor: pointer; min-height: 40px; display: flex; align-items: center;
     .card.miss { animation: none; }
     .card.ok { animation: none; opacity: .3; }
     .card.sel { transform: none; }
+}
+
+/* v1.1: Words cards, disabled deck, level chips */
+.card.k.word .glyph { font-size: min(52cqh, calc(92cqw / var(--len, 2))); white-space: nowrap; }
+.card.a .gl.rd { font-family: var(--ja-card, inherit); font-size: 1.05rem; }
+.lp-tile.word { font-size: 2rem; width: auto; padding: 0 .4rem; white-space: nowrap; }
+.segmented input:disabled + span { opacity: .45; cursor: not-allowed; }
+.segmented small { font-size: .75em; opacity: .75; margin-left: .4em; font-weight: 500; }
+#next-level-btn { margin-top: .4rem; }
+
+/* ------------------------------------------------------------------ R4: levels line, PC keyboard layout */
+.playing { margin: .55rem 0 .1rem; font-weight: 600; }
+.card .kk { display: none; }
+@media (hover: hover) and (pointer: fine) and (min-width: 700px) {
+    .table.keys .card .kk {
+        display: block; position: absolute; top: 3px; left: 5px; font: 600 11px/1 var(--ui);
+        text-transform: uppercase; opacity: .5; pointer-events: none;
+    }
+    .card.ok .kk, .card.miss .kk { opacity: 0; }
+}
+@media (hover: hover) and (pointer: fine) and (min-width: 760px) {
+    /* both sides the same grid (3 × 4, or 2 × 3 for Quick); answers get the wider share */
+    #play.keys { grid-template-columns: minmax(0, 1fr) clamp(240px, 22vw, 320px); }
+    .table.keys .zone.kanji { flex: 0 1 38%; max-width: 38%; height: auto; aspect-ratio: calc(var(--cols) * 1.0) / calc(var(--rows) * 1.08); }
+    .table.keys .zone.answers { flex: 1 1 0; max-width: 900px; height: auto;
+                                aspect-ratio: calc(var(--cols) * 1.0) / calc(var(--rows) * 0.62); max-height: 100%; }
+    .table.keys .card.a .gl { font-size: clamp(14px, min(22cqh, 11cqw), 18px); }
 }

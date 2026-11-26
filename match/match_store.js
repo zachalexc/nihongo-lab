@@ -17,7 +17,7 @@
     const SCHEMA = 1;
     const FORMAT = 'nihongo-match-export';
     const LOG_KEEP = 300;          // finished boards kept in the history log
-    const DECKS = ['kanji-meaning'];
+    const DECKS = ['kanji-meaning', 'word-reading'];
 
     function uuid() {
         if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();

@@ -356,6 +356,92 @@
         return main.slice(0, main.indexOf(level) + 1);
     }
 
+
+    // ------------------------------------------------------------------ keep going into the next level
+    const MAIN_LEVELS = LEVEL_ORDER.slice(0, 5);
+    function nextLevel(lv) {
+        const i = MAIN_LEVELS.indexOf(lv);
+        return i >= 0 && i < MAIN_LEVELS.length - 1 ? MAIN_LEVELS[i + 1] : null;
+    }
+    function fullySeen(items, states) { return items.length > 0 && items.every(it => !!states[it.id]); }
+
+    // Levels in play (decision 5, R4). Base = the chosen level, plus every easier level when
+    // includeEasier. With keepGoing, while the newest level in play has no unseen items, the next
+    // level is added on top. levels: { lv: [items] } loaded so far. Returns { levels, added, need }:
+    // need = a level that must be loaded before the answer is final (call again after loading it).
+    function levelsInPlay({ level, includeEasier, keepGoing, levels, states }) {
+        const base = poolLevels(level, !!includeEasier);
+        const missing = base.find(lv => !levels[lv]);
+        if (missing) return { levels: base, added: [], need: missing };
+        const out = base.slice(), added = [];
+        let lv = level;
+        while (keepGoing && nextLevel(lv)) {
+            if (!levels[lv]) return { levels: out, added, need: lv };
+            if (!fullySeen(levels[lv], states || {})) break;
+            lv = nextLevel(lv);
+            if (!levels[lv]) return { levels: out, added, need: lv };
+            out.push(lv); added.push(lv);
+        }
+        return { levels: out, added, need: null };
+    }
+
+    // "Playing: N4" / "N5–N4" / "N4 → N3" / "N5–N4 → N3".
+    function playingLabel(r, names) {
+        const nm = lv => (names && names[lv]) || lv;
+        const base = r.levels.filter(lv => !r.added.includes(lv));
+        let s = base.length > 1 ? `${nm(base[0])}–${nm(base[base.length - 1])}` : nm(base[0]);
+        if (r.added.length) s += ` → ${nm(r.added[r.added.length - 1])}`;
+        return s;
+    }
+
+    // Items a board draws from: every item of the levels in play. For Review, also the already-seen
+    // items of every played level (unseen items of those levels never come in).
+    // levels: { lv: [items] } (loaded), inPlay: [levels], played: [levels with progress].
+    function poolFor({ inPlay, played, levels, states, review }) {
+        const out = [], ids = new Set();
+        const push = it => { if (!ids.has(it.id)) { ids.add(it.id); out.push(it); } };
+        inPlay.forEach(lv => (levels[lv] || []).forEach(push));
+        if (review) (played || []).forEach(lv => {
+            if (!inPlay.includes(lv)) (levels[lv] || []).forEach(it => { if (states[it.id]) push(it); });
+        });
+        return out;
+    }
+
+    // ------------------------------------------------------------------ board sizes (decision 8)
+    const SIZES = [6, 12];
+    function normSize(n) { return Number(n) === 6 ? 6 : 12; }   // a saved 8 (or anything else) becomes 12
+
+    // ------------------------------------------------------------------ keyboard play (decision 9)
+    // Keys by physical position (KeyboardEvent.code), so a Japanese IME or JIS layout doesn't matter.
+    const KEY_ROWS = {
+        k: [['KeyQ', 'KeyW', 'KeyE', 'KeyR'], ['KeyA', 'KeyS', 'KeyD', 'KeyF'], ['KeyZ', 'KeyX', 'KeyC', 'KeyV']],
+        a: [['KeyU', 'KeyI', 'KeyO', 'KeyP'], ['KeyJ', 'KeyK', 'KeyL', 'Semicolon'], ['KeyM', 'Comma', 'Period', 'Slash']],
+    };
+    const KEY_LABEL = { Semicolon: ';', Comma: ',', Period: '.', Slash: '/' };
+    const keyLabel = code => KEY_LABEL[code] || code.replace('Key', '');
+    const keyCols = n => (n <= 6 ? 3 : 4);
+    // codes for the n cards of each side, in card order (rows of keyCols(n)).
+    function keyMap(n) {
+        const cols = keyCols(n), out = { k: [], a: [] };
+        for (const side of ['k', 'a']) for (let i = 0; i < n && i < 12; i++) out[side].push(KEY_ROWS[side][Math.floor(i / cols)][i % cols]);
+        return out;
+    }
+    // e: { code, ctrlKey, altKey, metaKey }. Returns { side: 'k'|'a', index } or null.
+    function keyTarget(e, n) {
+        if (!e || e.ctrlKey || e.altKey || e.metaKey) return null;
+        const m = keyMap(n);
+        for (const side of ['k', 'a']) { const i = m[side].indexOf(e.code); if (i >= 0) return { side, index: i }; }
+        return null;
+    }
+    // A key press belongs to the game only when focus isn't in a text field, a dialog or the learn panel.
+    function keyAllowed(target) {
+        if (!target || !target.closest) return true;
+        if (target.isContentEditable) return false;
+        const tag = (target.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') return false;
+        return !target.closest('[role="dialog"], [role="alertdialog"], dialog, .learn');
+    }
+
     return {
         TUNING, LEVEL_ORDER, GRADE,
         norm, synonymIndex, clash,
@@ -363,5 +449,7 @@
         band, isDue, isTrouble, gradeBoard, applyGrade,
         pairKey, isActive, partnersOf, updateConfusions, applyBoard,
         buildBoard, bestKey, isBetter, firstTry, poolLevels,
+        nextLevel, fullySeen, poolFor, levelsInPlay, playingLabel,
+        SIZES, normSize, KEY_ROWS, keyLabel, keyCols, keyMap, keyTarget, keyAllowed,
     };
 }));

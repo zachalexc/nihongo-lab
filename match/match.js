@@ -4,10 +4,13 @@
     'use strict';
 
     const C = window.MatchCore, S = window.MatchStore;
-    const APP_VERSION = '1.0';
-    const DECK = 'kanji-meaning';
+    const APP_VERSION = '1.3';
+    const DECKS = {
+        'kanji-meaning': { files: 'levels', front: 'kanji', back: 'meaning', items: ['kanji', 'kanji'] },
+        'word-reading': { files: 'words', front: 'word', back: 'reading', items: ['word', 'words'] },
+    };
     const LEVEL_NAMES = { N5: 'N5', N4: 'N4', N3: 'N3', N2: 'N2', N1: 'N1', X: 'Extras' };
-    const DEFAULTS = { level: 'N5', includeLower: false, size: 8, showTimer: true, vibrate: true,
+    const DEFAULTS = { deck: 'kanji-meaning', level: 'N5', includeEasier: false, keepGoing: true, played: null, size: 12, showTimer: true, vibrate: true,
                        iosTipDismissed: false, persistAsked: false };
     const params = new URLSearchParams(location.search);
     const TEST_SEED = params.has('seed') ? Number(params.get('seed')) : null;
@@ -15,25 +18,33 @@
     const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
     const app = {
-        meta: null, synIdx: null, levels: {}, byId: new Map(),
+        meta: null, synIdx: null, levels: { 'kanji-meaning': {}, 'word-reading': {} }, byId: new Map(),
+        span: [], inPlay: { levels: [], added: [] }, pool: [], reviewPool: [],
         store: null, saved: null, settings: Object.assign({}, DEFAULTS),
         recent: [], board: null, boardCount: 0, timer: null, lastShown: null,
     };
     if (params.has('test')) window.__match = app;
 
     // ------------------------------------------------------------------ helpers
-    const items = () => app.saved.items[DECK];
-    const confusions = () => app.saved.confusions[DECK];
+    const deck = () => DECKS[app.settings.deck] ? app.settings.deck : 'kanji-meaning';
+    const D = () => DECKS[deck()];
+    const isWord = it => it.id.startsWith('w:');
+    const items = () => app.saved.items[deck()] || (app.saved.items[deck()] = {});
+    const confusions = () => app.saved.confusions[deck()] || (app.saved.confusions[deck()] = {});
+    const nItems = n => plural(n, D().items[0], D().items[1]);
     const today = () => C.studyDay(Date.now());
     const fmtTime = ms => { const s = Math.round(ms / 1000); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
     const plural = (n, one, many) => `${n} ${n === 1 ? one : (many || one + 's')}`;
     const glossText = it => it.gloss + (it.gloss2 ? ', ' + it.gloss2 : '');
-    const poolLevels = () => C.poolLevels(app.settings.level, app.settings.includeLower);
-    const choiceName = () => {
-        const { level, includeLower } = app.settings;
-        if (includeLower && level === 'X') return 'All levels';
-        return LEVEL_NAMES[level] + (includeLower && level !== 'N5' ? ' and below' : '');
-    };
+    const backText = it => isWord(it) ? it.r : glossText(it);
+    const playingText = () => app.inPlay.levels.length ? C.playingLabel(app.inPlay, LEVEL_NAMES) : LEVEL_NAMES[app.settings.level];
+    const choiceName = () => (deck() === 'word-reading' ? 'Words ' : '') + playingText();
+    // PC keyboard layout (decision 9): both sides the same grid, key letters on the cards.
+    const KEY_LAYOUT = '(hover: hover) and (pointer: fine) and (min-width: 700px)';
+    // Off since R4 (Zachary 11/26: harder to know which key to press than expected). true turns it back on.
+    const KEY_PLAY = false;
+    const keyLayout = () => KEY_PLAY && window.matchMedia(KEY_LAYOUT).matches;
+    const played = () => (app.settings.played && app.settings.played[deck()]) || [];
 
     function showWarning(text) {
         const w = $('home-warning');
@@ -41,17 +52,47 @@
     }
 
     async function loadLevels(levels) {
-        const need = levels.filter(lv => !app.levels[lv]);
+        const cache = app.levels[deck()], files = app.meta[D().files];
+        const need = levels.filter(lv => !cache[lv] && files[lv]);
         await Promise.all(need.map(async lv => {
-            const info = app.meta.levels[lv];
+            const info = files[lv];
             const res = await fetch(`data/${info.file}?b=${app.meta.build}`);
             if (!res.ok) throw new Error(`Couldn't load ${info.file} (${res.status})`);
             const doc = await res.json();
-            app.levels[lv] = doc.items;
+            cache[lv] = doc.items;
             doc.items.forEach(it => app.byId.set(it.id, it));
         }));
-        return levels.flatMap(lv => app.levels[lv]);
+        return levels.flatMap(lv => cache[lv] || []);
     }
+
+    // Works out the levels in play (decision 5) and loads them, plus every played level (for Review).
+    // Sets app.inPlay, app.span (levels in play), app.pool (Play) and app.reviewPool (Review).
+    async function planPool() {
+        const st = items(), cache = app.levels[deck()];
+        let r;
+        for (;;) {
+            r = C.levelsInPlay({ level: app.settings.level, includeEasier: app.settings.includeEasier,
+                                 keepGoing: app.settings.keepGoing, levels: cache, states: st });
+            if (!r.need) break;
+            if (!app.meta[D().files][r.need]) { r = { levels: r.levels.filter(lv => cache[lv]), added: r.added, need: null }; break; }
+            await loadLevels([r.need]);
+        }
+        await loadLevels(played());
+        app.inPlay = r; app.span = r.levels.slice();
+        app.pool = C.poolFor({ inPlay: r.levels, played: played(), levels: cache, states: st });
+        app.reviewPool = C.poolFor({ inPlay: r.levels, played: played(), levels: cache, states: st, review: true });
+        return app.pool;
+    }
+    function notePlayed(levels) {
+        const p = app.settings.played || (app.settings.played = {});
+        const list = p[deck()] || (p[deck()] = []);
+        levels.forEach(lv => { if (!list.includes(lv)) list.push(lv); });
+        list.sort((a, b) => C.LEVEL_ORDER.indexOf(a) - C.LEVEL_ORDER.indexOf(b));
+        saveSettings();
+    }
+    const loadRecent = () => {
+        app.recent = (app.saved.log || []).filter(r => r.deck === deck()).slice(-3).reverse().map(r => r.items.map(i => i.id));
+    };
 
     // ------------------------------------------------------------------ start-up
     async function init() {
@@ -64,9 +105,12 @@
             showWarning("This browser won't let the page save progress (private mode?). You can play, but nothing will be kept.");
         }
         Object.assign(app.settings, app.saved.settings || {});
+        migrateSettings();
         if (app.saved.warnings && app.saved.warnings.length) showWarning(app.saved.warnings.join(' '));
+        // Levels with progress: kept in settings; v1 progress is found from the board log.
+        if (!app.settings.played) derivePlayed();
         // Last boards from the log, so spacing still works after a reload.
-        app.recent = (app.saved.log || []).filter(r => r.deck === DECK).slice(-3).reverse().map(r => r.items.map(i => i.id));
+        loadRecent();
 
         const res = await fetch(`data/meta.json?v=${APP_VERSION}`, { cache: 'no-cache' });
         app.meta = await res.json();
@@ -83,14 +127,36 @@
         }
     }
 
+    // v1/R3 settings: size 8 → 12 (decision 8); v1 "include lower levels" → Include easier levels.
+    function migrateSettings() {
+        const st = app.settings;
+        st.size = C.normSize(st.size);
+        const saved = (app.saved && app.saved.settings) || {};
+        if (typeof saved.includeEasier !== 'boolean' && 'includeLower' in saved) st.includeEasier = !!saved.includeLower;
+        if (typeof st.includeEasier !== 'boolean') st.includeEasier = false;
+        delete st.includeLower;
+        if (typeof st.keepGoing !== 'boolean') st.keepGoing = true;
+    }
+
+    function derivePlayed() {
+        app.settings.played = {};
+        (app.saved.log || []).forEach(r => (r.levels || [r.level]).forEach(lv => {
+            const l = app.settings.played[r.deck] || (app.settings.played[r.deck] = []);
+            if (lv && !l.includes(lv)) l.push(lv);
+        }));
+    }
+
     function saveSettings() { app.store.saveSettings(app.settings).catch(() => {}); }
 
     function applySettingsToForm() {
         const f = $('setup');
         f.querySelector(`input[name="level"][value="${app.settings.level}"]`).checked = true;
+        const dk = f.querySelector(`input[name="deck"][value="${deck()}"]`);
+        if (dk) dk.checked = true;
         const size = f.querySelector(`input[name="size"][value="${app.settings.size}"]`);
         if (size) size.checked = true;
-        $('include-lower').checked = !!app.settings.includeLower;
+        $('include-easier').checked = !!app.settings.includeEasier;
+        $('keep-going').checked = !!app.settings.keepGoing;
         $('opt-timer').checked = !!app.settings.showTimer;
         $('opt-vibrate').checked = !!app.settings.vibrate;
     }
@@ -100,12 +166,18 @@
         const f = $('setup');
         f.addEventListener('change', e => {
             if (e.target.name === 'level') app.settings.level = e.target.value;
-            if (e.target.name === 'size') app.settings.size = Number(e.target.value);
-            if (e.target.id === 'include-lower') app.settings.includeLower = e.target.checked;
+            if (e.target.name === 'size') app.settings.size = C.normSize(e.target.value);
+            if (e.target.name === 'deck') { app.settings.deck = e.target.value; loadRecent(); }
+            if (e.target.id === 'keep-going') app.settings.keepGoing = e.target.checked;
+            if (e.target.id === 'include-easier') app.settings.includeEasier = e.target.checked;
             saveSettings(); renderHome();
         });
         f.addEventListener('submit', e => { e.preventDefault(); startBoard('play'); });
         $('review-btn').addEventListener('click', () => startBoard('review'));
+        $('next-level-btn').addEventListener('click', () => {
+            const nx = C.nextLevel(app.settings.level); if (!nx) return;
+            app.settings.level = nx; applySettingsToForm(); saveSettings(); renderHome();
+        });
         $('opt-timer').addEventListener('change', e => { app.settings.showTimer = e.target.checked; saveSettings(); });
         $('opt-vibrate').addEventListener('change', e => { app.settings.vibrate = e.target.checked; saveSettings(); });
         $('export-btn').addEventListener('click', exportProgress);
@@ -117,15 +189,36 @@
     async function renderHome() {
         $('extras-hint').classList.toggle('hidden', app.settings.level !== 'X');
         let pool;
-        try { pool = await loadLevels(poolLevels()); } catch (e) { showWarning(e.message); return; }
-        const st = items(), day = today();
+        try { pool = await planPool(); } catch (e) { showWarning(e.message); return; }
+        const st = items(), day = today(), cache = app.levels[deck()];
+
+        // level chips: seen / total (unloaded levels have nothing seen)
+        const files = app.meta[D().files];
+        document.querySelectorAll('#level-choice input').forEach(inp => {
+            const lv = inp.value, total = files[lv] ? files[lv].count : 0;
+            const seen = cache[lv] ? cache[lv].filter(it => st[it.id]).length : 0;
+            let c = inp.parentElement.querySelector('small');
+            if (!c) { c = el('small', 'lv-seen'); inp.nextElementSibling.appendChild(c); }
+            c.textContent = ` ${seen}/${total}`;
+        });
+        const nx = C.nextLevel(app.settings.level);
+        const doneHere = C.fullySeen(cache[app.settings.level] || [], st);
+        const nb = $('next-level-btn');
+        nb.classList.toggle('hidden', !(nx && doneHere));
+        if (nx) nb.textContent = `Start ${LEVEL_NAMES[nx]}`;
+        $('playing-line').textContent = `Playing: ${playingText()}`;
+        const add = app.inPlay.added;
+        $('keep-hint').textContent = add.length
+            ? `${LEVEL_NAMES[app.settings.level]} is fully seen, so new ${D().items[1]} now come from ${LEVEL_NAMES[add[add.length - 1]]}.`
+            : '';
 
         // progress bars
         const bars = $('progress-bars'); bars.textContent = '';
-        for (const lv of poolLevels()) {
+        const shownLevels = C.LEVEL_ORDER.filter(lv => cache[lv] && (app.span.includes(lv) || played().includes(lv)));
+        for (const lv of shownLevels) {
             const counts = { strong: 0, learning: 0, weak: 0, unseen: 0 };
-            app.levels[lv].forEach(it => { counts[C.band(st[it.id])]++; });
-            const total = app.levels[lv].length;
+            cache[lv].forEach(it => { counts[C.band(st[it.id])]++; });
+            const total = cache[lv].length;
             const row = el('div', 'lv-row');
             row.appendChild(el('span', 'lv-name', LEVEL_NAMES[lv]));
             const bar = el('div', 'lv-bar');
@@ -142,18 +235,19 @@
         }
 
         // review availability
-        const due = pool.filter(it => st[it.id] && (st[it.id].box === 1 || st[it.id].due <= day)).length;
+        const rpool = app.reviewPool;
+        const due = rpool.filter(it => st[it.id] && (st[it.id].box === 1 || st[it.id].due <= day)).length;
         const rb = $('review-btn');
         rb.textContent = due ? `Review (${due})` : 'Review';
         rb.disabled = !due;
         let hint = '';
         if (!due) {
-            const future = pool.map(it => st[it.id]).filter(Boolean).map(s => s.due).filter(d => d > day).sort();
+            const future = rpool.map(it => st[it.id]).filter(Boolean).map(s => s.due).filter(d => d > day).sort();
             if (future.length) {
                 const next = future[0], n = future.filter(d => d === next).length;
                 const when = C.dayDiff(day, next) === 1 ? 'tomorrow' : `on ${next}`;
-                hint = `Nothing to review right now. ${plural(n, 'kanji', 'kanji')} come back ${when}.`;
-            } else if (!pool.some(it => st[it.id])) {
+                hint = `Nothing to review right now. ${nItems(n)} come back ${when}.`;
+            } else if (!rpool.some(it => st[it.id])) {
                 hint = 'Review opens once you have played a board.';
             }
         }
@@ -164,7 +258,7 @@
         let d = day, streak = 0;
         if (!(days[d] && days[d].boards)) d = C.addDays(d, -1);
         while (days[d] && days[d].boards) { streak++; d = C.addDays(d, -1); }
-        const best = app.saved.bests[C.bestKey(DECK, app.settings.level, app.settings.includeLower, app.settings.size)];
+        const best = app.saved.bests[C.bestKey(deck(), app.settings.level, app.settings.includeEasier, app.settings.size)];
         const facts = [];
         facts.push(`Boards today: ${(days[day] && days[day].boards) || 0}.`);
         if (streak) facts.push(`Study streak: ${plural(streak, 'day')}.`);
@@ -175,11 +269,13 @@
         const trouble = pool.filter(it => C.isTrouble(st[it.id]));
         $('trouble').classList.toggle('hidden', !trouble.length);
         $('trouble-count').textContent = trouble.length;
+        $('trouble-what').textContent = D().items[1];
         const tl = $('trouble-list'); tl.textContent = '';
         trouble.forEach(it => {
             const c = el('span', 'chip');
             const k = el('span', 'k', it.k); k.lang = 'ja';
-            c.append(k, el('span', 'm', glossText(it)));
+            const m = el('span', 'm', backText(it)); if (isWord(it)) m.lang = 'ja';
+            c.append(k, m);
             tl.appendChild(c);
         });
 
@@ -234,13 +330,15 @@
         const no = el('button', 'btn small', 'Cancel');
         yes.type = no.type = 'button';
         const when = sum.exportedAt ? new Date(sum.exportedAt).toLocaleString() : 'an unknown date';
-        confirmBox([el('p', null, `This backup has ${plural(sum.items, 'kanji', 'kanji')} and ${plural(sum.boards, 'board')}, exported ${when}. Importing replaces the progress in this browser.`), yes, no]);
+        confirmBox([el('p', null, `This backup has progress on ${plural(sum.items, 'card')} and ${plural(sum.boards, 'board')}, exported ${when}. Importing replaces the progress in this browser.`), yes, no]);
         no.onclick = closeConfirm;
         yes.onclick = async () => {
             await app.store.importAll(obj);
             app.saved = await app.store.load();
             Object.assign(app.settings, DEFAULTS, app.saved.settings || {});
-            app.recent = [];
+            migrateSettings();
+            if (!app.settings.played) derivePlayed();
+            loadRecent();
             applySettingsToForm(); closeConfirm(); showWarning('Backup imported.'); renderHome();
         };
     }
@@ -266,6 +364,7 @@
     // ------------------------------------------------------------------ board
     const SHORT_LANDSCAPE = '(orientation: landscape) and (max-height: 500px) and (min-width: 560px)';
     function gridFor(n) {
+        if (keyLayout()) { const c = C.keyCols(n), r = Math.ceil(n / c); return { kc: c, kr: r, ac: c, ar: r }; }
         const kc = n <= 6 ? 3 : 4;
         const ac = (n <= 8 || window.matchMedia(SHORT_LANDSCAPE).matches) ? 2 : 3;
         return { kc, kr: Math.ceil(n / kc), ac, ar: Math.ceil(n / ac) };
@@ -273,7 +372,8 @@
 
     async function startBoard(mode) {
         let pool;
-        try { pool = await loadLevels(poolLevels()); } catch (e) { showWarning(e.message); return; }
+        try { await planPool(); } catch (e) { showWarning(e.message); return; }
+        pool = mode === 'review' ? app.reviewPool : app.pool;
         const seed = TEST_SEED !== null ? TEST_SEED + app.boardCount : ((Date.now() ^ (Math.random() * 4294967296)) >>> 0);
         const b = C.buildBoard({ pool, states: items(), confusions: confusions(), size: app.settings.size, mode,
                                  recent: app.recent, today: today(), seed, synIdx: app.synIdx });
@@ -282,9 +382,10 @@
             return;
         }
         app.boardCount++;
+        notePlayed(app.span);
         app.board = {
-            mode, seed, ids: b.ids, size: b.ids.length, level: app.settings.level, includeLower: app.settings.includeLower,
-            levels: poolLevels(), startedAt: Date.now(), activeMs: 0, lastTick: performance.now(),
+            mode, seed, ids: b.ids, size: b.ids.length, level: app.settings.level, deck: deck(),
+            keepGoing: !!app.settings.keepGoing, includeEasier: !!app.settings.includeEasier, levels: app.span.slice(), startedAt: Date.now(), activeMs: 0, lastTick: performance.now(),
             sel: { k: null, a: null }, matches: [], wrongPairs: [], gaps: {}, lastMatchAt: 0, done: false,
         };
         renderBoard(b);
@@ -302,6 +403,7 @@
         zk.style.gridTemplateColumns = `repeat(${g.kc}, minmax(0, 1fr))`; zk.style.gridTemplateRows = `repeat(${g.kr}, minmax(0, 1fr))`;
         za.style.gridTemplateColumns = `repeat(${g.ac}, minmax(0, 1fr))`; za.style.gridTemplateRows = `repeat(${g.ar}, minmax(0, 1fr))`;
         zk.dataset.cols = g.kc; za.dataset.cols = g.ac;
+        $('table').classList.toggle('keys', keyLayout()); $('play').classList.toggle('keys', keyLayout());
         zk.style.setProperty('--cols', g.kc); zk.style.setProperty('--rows', g.kr);
         za.style.setProperty('--cols', g.ac); za.style.setProperty('--rows', g.ar);
     }
@@ -314,28 +416,38 @@
         layoutZones();
         b.kanjiOrder.forEach(id => {
             const it = app.byId.get(id);
-            const c = el('button', 'card k'); c.type = 'button';
+            const c = el('button', 'card k' + (isWord(it) ? ' word' : '')); c.type = 'button';
             c.dataset.id = id; c.dataset.kind = 'k';
-            c.setAttribute('aria-label', 'kanji ' + it.k); c.setAttribute('aria-pressed', 'false');
+            c.setAttribute('aria-label', (isWord(it) ? 'word ' : 'kanji ') + it.k); c.setAttribute('aria-pressed', 'false');
             const s = el('span', 'glyph', it.k); s.lang = 'ja'; c.appendChild(s);
+            if (isWord(it)) c.style.setProperty('--len', Math.max(2, [...it.k].length));
             zk.appendChild(c);
         });
+        const km = C.keyMap(b.kanjiOrder.length);
         b.answerOrder.forEach(id => {
             const it = app.byId.get(id);
             const c = el('button', 'card a'); c.type = 'button';
             c.dataset.id = id; c.dataset.kind = 'a';
-            c.setAttribute('aria-label', 'meaning: ' + glossText(it)); c.setAttribute('aria-pressed', 'false');
-            c.appendChild(el('span', 'gl', glossText(it)));
+            c.setAttribute('aria-label', `${D().back}: ` + backText(it)); c.setAttribute('aria-pressed', 'false');
+            const g = el('span', 'gl' + (isWord(it) ? ' rd' : ''), backText(it)); if (isWord(it)) g.lang = 'ja';
+            c.appendChild(g);
             za.appendChild(c);
         });
+        [[zk, km.k], [za, km.a]].forEach(([z, codes]) => Array.from(z.children).forEach((c, i) => {
+            if (!codes[i]) return;
+            const kk = el('span', 'kk', C.keyLabel(codes[i])); kk.setAttribute('aria-hidden', 'true');
+            c.appendChild(kk); c.dataset.key = codes[i];
+        }));
         zk.classList.remove('hidden'); za.classList.remove('hidden');
         $('summary').classList.add('hidden');
         $('quit-bar').classList.add('hidden');
         const learn = $('learn');
         learn.classList.remove('open');
         learn.textContent = '';
-        learn.appendChild(el('p', 'learn-empty', 'Tap a kanji, then its meaning.'));
-        $('bar-title').textContent = choiceName() + (B.mode === 'review' ? ', review' : '');
+        learn.appendChild(el('p', 'learn-empty', `Tap a ${D().front}, then its ${D().back}.`));
+        $('zone-kanji').setAttribute('aria-label', D().front === 'word' ? 'Words' : 'Kanji');
+        $('zone-answers').setAttribute('aria-label', D().back === 'reading' ? 'Readings' : 'Meanings');
+        $('bar-title').textContent = (B.mode === 'review' ? (deck() === 'word-reading' ? 'Words ' : '') + 'Review' : choiceName());
         $('bar-timer').classList.toggle('hidden', !app.settings.showTimer);
         updateBar();
     }
@@ -373,6 +485,12 @@
         if (B.sel.k && B.sel.a) tryPair(B.sel.k, B.sel.a);
     }
 
+    function clearSel() {
+        const B = app.board; if (!B) return;
+        ['k', 'a'].forEach(s => { if (B.sel[s]) { B.sel[s].classList.remove('sel'); B.sel[s].setAttribute('aria-pressed', 'false'); } });
+        B.sel = { k: null, a: null };
+    }
+
     function tryPair(k, a) {
         const B = app.board;
         [k, a].forEach(c => { c.classList.remove('sel'); c.setAttribute('aria-pressed', 'false'); });
@@ -385,7 +503,7 @@
             [k, a].forEach(c => { c.classList.add('ok'); c.disabled = true; c.setAttribute('aria-hidden', 'true'); });
             setTimeout(() => { k.classList.add('gone'); a.classList.add('gone'); }, 280);
             showLearn(id);
-            announce(`Matched: ${it.k}, ${glossText(it)}`);
+            announce(`Matched: ${it.k}, ${backText(it)}`);
             moveFocusFrom(k);
             if (B.matches.length === B.size) { B.done = true; setTimeout(() => finish(false), 320); }
         } else {
@@ -411,6 +529,7 @@
         const it = app.byId.get(id); if (!it) return;
         app.lastShown = id;
         const p = $('learn'); p.textContent = '';
+        if (isWord(it)) { showLearnWord(it, p); return; }
         const lp = el('div', 'lp');
         const tile = el('div', 'lp-tile', it.k); tile.lang = 'ja'; lp.appendChild(tile);
         lp.appendChild(el('div', 'lp-gloss', glossText(it)));
@@ -447,6 +566,32 @@
         p.scrollTop = 0;
     }
 
+    function showLearnWord(it, p) {
+        const lp = el('div', 'lp');
+        const tile = el('div', 'lp-tile word', it.k); tile.lang = 'ja'; lp.appendChild(tile);
+        const rd = el('div', 'lp-gloss', it.r); rd.lang = 'ja'; lp.appendChild(rd);
+        lp.appendChild(el('div', 'lp-more', it.gloss));
+        if (it.alt && it.alt.length) {
+            const a = el('div', 'lp-more', 'Also read: ' + it.alt.join(', ')); a.lang = 'ja'; lp.appendChild(a);
+        }
+        const parts = (it.split || '').split(';').map(x => x.split(':')).filter(x => x.length === 2);
+        if (parts.length) {
+            const row = el('div', 'lp-read');
+            parts.forEach(([k, r]) => {
+                const s = el('span', 'r', `${k} ${r}`); s.lang = 'ja'; row.appendChild(s);
+            });
+            lp.appendChild(row);
+        }
+        const partners = C.partnersOf(confusions(), it.id).map(pid => app.byId.get(pid)).filter(Boolean);
+        if (partners.length) {
+            const m = el('div', 'lp-mix', 'Easy to mix up with ' + partners.map(o => `${o.k} (${o.r})`).join(', ')); m.lang = 'ja';
+            lp.appendChild(m);
+        }
+        lp.appendChild(el('div', 'lp-meta', `${LEVEL_NAMES[it.lv]} word (its hardest kanji is ${LEVEL_NAMES[it.lv]})`));
+        p.appendChild(lp);
+        p.scrollTop = 0;
+    }
+
     async function finish(abandoned) {
         const B = app.board;
         tick(); B.done = true;
@@ -457,15 +602,15 @@
         const newItems = Object.assign({}, items(), r.changed);
         const result = {
             id: S.uuid(), schema: 1, userId: app.saved.meta.userId, deviceId: app.saved.meta.deviceId,
-            appVersion: APP_VERSION, dataBuild: app.meta.build, deck: DECK,
-            level: B.level, levels: B.levels, includeLower: B.includeLower, mode: B.mode, size: B.size,
+            appVersion: APP_VERSION, dataBuild: app.meta.build, deck: B.deck,
+            level: B.level, levels: B.levels, keepGoing: B.keepGoing, mode: B.mode, size: B.size,
             startedAt: B.startedAt, endedAt: now, activeMs: Math.round(B.activeMs), misses: B.wrongPairs.length,
             abandoned, seed: B.seed,
             items: B.ids.map(id => { const g = r.grades[id]; return { id, rank: g.rank, m: g.m, kSide: g.kSide, aSide: g.aSide, grade: g.grade, gapMs: B.gaps[id] ?? null }; }),
             wrongPairs: B.wrongPairs,
         };
         const bests = Object.assign({}, app.saved.bests);
-        const key = C.bestKey(DECK, B.level, B.includeLower, B.size);
+        const key = C.bestKey(B.deck, B.level, B.includeEasier, B.size);
         const prevBest = bests[key];
         let newBest = false;
         if (!abandoned && B.mode === 'play' && B.size === app.settings.size && C.isBetter(result, prevBest)) {
@@ -474,11 +619,11 @@
         }
         let saveError = null;
         try {
-            await app.store.saveBoard({ deck: DECK, items: newItems, confusions: r.confusions, bests, result,
+            await app.store.saveBoard({ deck: B.deck, items: newItems, confusions: r.confusions, bests, result,
                 day: { key: day, boards: abandoned ? 0 : 1, misses: result.misses, activeMs: result.activeMs } });
         } catch (e) { saveError = e; }
-        app.saved.items[DECK] = newItems;
-        app.saved.confusions[DECK] = r.confusions;
+        app.saved.items[B.deck] = newItems;
+        app.saved.confusions[B.deck] = r.confusions;
         app.saved.bests = bests;
         app.saved.days = (await app.store.load()).days;
         app.saved.meta = (await app.store.load()).meta;
@@ -501,7 +646,7 @@
         stat(`${C.firstTry(grades)} of ${B.size}`, 'first try');
         inner.appendChild(stats);
         let note = '';
-        if (B.mode === 'review') note = 'Review boards mix the kanji you need most, so they don\'t count for bests.';
+        if (B.mode === 'review') note = `Review boards mix the ${D().items[1]} you need most, so they don't count for bests.`;
         else if (newBest) note = prevBest ? `New best for ${choiceName()}, ${B.size} pairs.` : `First best for ${choiceName()}, ${B.size} pairs.`;
         else if (prevBest) note = `Best for ${choiceName()}, ${B.size} pairs: ${plural(prevBest.misses, 'wrong pair')} in ${fmtTime(prevBest.activeMs)}.`;
         const n = el('p', 'best-note' + (newBest ? ' new' : ''), note);
@@ -518,8 +663,9 @@
                 const it = app.byId.get(g.id);
                 const bt = el('button'); bt.type = 'button';
                 const k = el('span', 'k', it.k); k.lang = 'ja';
-                bt.append(k, el('span', 'm', it.gloss));
-                bt.setAttribute('aria-label', `Show ${it.k}, ${glossText(it)}`);
+                const m = el('span', 'm', isWord(it) ? it.r : it.gloss); if (isWord(it)) m.lang = 'ja';
+                bt.append(k, m);
+                bt.setAttribute('aria-label', `Show ${it.k}, ${backText(it)}`);
                 bt.addEventListener('click', () => { showLearn(g.id); $('learn').classList.add('open'); });
                 box.appendChild(bt);
             });
@@ -568,7 +714,21 @@
         });
         document.addEventListener('keydown', e => {
             if ($('play').classList.contains('hidden')) return;
-            if (e.key === 'Escape') { e.preventDefault(); askQuit($('quit-bar').classList.contains('hidden')); return; }
+            const B = app.board;
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                if (B && !B.done && (B.sel.k || B.sel.a) && $('quit-bar').classList.contains('hidden')) { clearSel(); return; }
+                askQuit($('quit-bar').classList.contains('hidden')); return;
+            }
+            if (B && !B.done && keyLayout() && $('quit-bar').classList.contains('hidden') && C.keyAllowed(e.target)) {
+                const t = C.keyTarget(e, B.ids.length);
+                if (t) {
+                    e.preventDefault();
+                    const c = $(t.side === 'k' ? 'zone-kanji' : 'zone-answers').children[t.index];
+                    if (c && !c.classList.contains('ok') && !c.classList.contains('gone')) select(c);
+                    return;
+                }
+            }
             const card = e.target.closest && e.target.closest('.zone .card');
             if (!card) return;
             const dir = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: 'up', ArrowDown: 'down' }[e.key];

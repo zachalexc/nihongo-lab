@@ -5,6 +5,7 @@
   n5.txt ... n1.txt       vocabulary lists (Kanji, Hiragana, English): gloss choice and example words
   JMdict_e.gz             fallback example words (common entries only)
   KANJIDIC2 (JSON)        meanings and readings, from the scriptin/jmdict-simplified release below
+  jlpt_words.json         words and readings for the Words cards (read only; Endless's file)
   tools/gloss_overrides.tsv, tools/synonyms.tsv, tools/names_extras.txt
 
 Usage (from the repo folder):
@@ -194,6 +195,45 @@ def choose_gloss(k, meanings, words):
 
 
 # ---------------------------------------------------------------- build
+
+# ---------------------------------------------------------------- words (deck "word-reading")
+def build_words(repo, level_of, report, errors):
+    """Match's own word files from Endless's jlpt_words.json (read only). A word belongs to level L
+    if all its kanji are at or below L and at least one is at L. 々 counts as no kanji."""
+    src = json.load(open(os.path.join(repo, "jlpt_words.json"), encoding="utf-8"))
+    col = {f: i for i, f in enumerate(src["fields"])}
+    by_level = {lv: [] for lv in LEVELS}
+    seen_ids, skipped = set(), collections.Counter()
+    for row in src["rows"]:
+        t, r = row[col["t"]], row[col["r"]]
+        ks = [c for c in dict.fromkeys(t) if is_kanji(c) and c != "々"]
+        if not ks:
+            skipped["kana-only"] += 1; continue
+        if any(c not in level_of for c in ks):
+            skipped["kanji not in the kanji data"] += 1; continue
+        wid = f"w:{t}|{r}"
+        if wid in seen_ids:
+            errors.append(f"duplicate word id {wid}"); continue
+        seen_ids.add(wid)
+        alt = [a for a in (row[col["alt"]] or "").split(",") if a and a != r]
+        lv = max((level_of[c] for c in ks), key=lambda x: DIFF[x])
+        by_level[lv].append(dict(
+            id=wid, k=t, r=r, alt=alt, split=row[col["split"]], gloss=row[col["gloss"]],
+            lv=lv, kanji=ks, zipf=row[col["zipf"]] or 0,
+            shown=[r, "#" + t], keys=sorted(set([r, "#" + t] + alt))))
+    for lv, items in by_level.items():
+        items.sort(key=lambda w: (-w["zipf"], w["id"]))
+        for i, w in enumerate(items):          # board building sorts new items by freq, then strokes
+            w["freq"] = i + 1; w["strokes"] = len(w["k"]); del w["zipf"]
+        for w in items:                         # checks
+            if kana_only(w["k"]) or not w["kanji"]:
+                errors.append(f"kana-only word {w['id']}")
+            if any(c not in level_of for c in w["kanji"]):
+                errors.append(f"word {w['id']} has kanji missing from the kanji data")
+    report["words skipped"] = [f"{k}: {v}" for k, v in sorted(skipped.items())]
+    report["words per level"] = [f"{lv}: {len(v)}" for lv, v in by_level.items()]
+    return by_level
+
 def build(repo, out_dir, review_dir):
     report = collections.defaultdict(list)
     levels = load_levels(repo)
@@ -319,17 +359,27 @@ def build(repo, out_dir, review_dir):
         with open(os.path.join(out_dir, fn), "w", encoding="utf-8", newline="\n") as f:
             f.write(text + "\n")
         files[lv] = dict(count=len(items), file=fn, sha=hashlib.sha256(text.encode()).hexdigest()[:10])
-    build_id = hashlib.sha256("".join(v["sha"] for v in files.values()).encode()).hexdigest()[:8]
+    wfiles = {}
+    for lv, items in build_words(repo, level_of, report, errors).items():
+        doc = dict(schema=1, deck="word-reading", level=lv, items=items)
+        text = json.dumps(doc, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        fn = f"words_{lv}.json"
+        with open(os.path.join(out_dir, fn), "w", encoding="utf-8", newline="\n") as f:
+            f.write(text + "\n")
+        wfiles[lv] = dict(count=len(items), file=fn, sha=hashlib.sha256(text.encode()).hexdigest()[:10])
+    shas = [v["sha"] for v in files.values()] + [v["sha"] for v in wfiles.values()]
+    build_id = hashlib.sha256("".join(shas).encode()).hexdigest()[:8]
     meta = dict(
         schema=1, build=build_id, built=date.today().isoformat(),
-        levels=files,
+        levels=files, words=wfiles,
         levelNames={"N5": "N5", "N4": "N4", "N3": "N3", "N2": "N2", "N1": "N1", "X": "Extras"},
         synonyms=synonyms,
         sources=dict(
             kanjidic2=dict(release=KANJIDIC_RELEASE, dictDate=dict_date, version=kd_version,
                            licence="CC BY-SA 4.0, EDRDG"),
             jmdict=dict(file="JMdict_e.gz", use="fallback example words", licence="CC BY-SA 4.0, EDRDG"),
-            lists="kanji_list.xlsx; n5.txt–n1.txt"))
+            lists="kanji_list.xlsx; n5.txt–n1.txt",
+            words="jlpt_words.json (Nihongo Lab, CC BY-SA 4.0), deck word-reading"))
     with open(os.path.join(out_dir, "meta.json"), "w", encoding="utf-8", newline="\n") as f:
         json.dump(meta, f, ensure_ascii=False, indent=1, sort_keys=True)
         f.write("\n")

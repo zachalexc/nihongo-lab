@@ -1,6 +1,6 @@
 {
- "build": "65899685",
- "built": "2026-11-19",
+ "build": "43a7a82f",
+ "built": "2026-11-25",
  "levelNames": {
   "N1": "N1",
   "N2": "N2",
@@ -54,7 +54,8 @@
    "release": "3.6.2+20261116213322",
    "version": "3.6.2"
   },
-  "lists": "kanji_list.xlsx; n5.txt–n1.txt"
+  "lists": "kanji_list.xlsx; n5.txt–n1.txt",
+  "words": "jlpt_words.json (Nihongo Lab, CC BY-SA 4.0), deck word-reading"
  },
  "synonyms": [
   [
@@ -224,5 +225,37 @@
    "pretty",
    "lovely"
   ]
- ]
+ ],
+ "words": {
+  "N1": {
+   "count": 1756,
+   "file": "words_N1.json",
+   "sha": "69859ce319"
+  },
+  "N2": {
+   "count": 1246,
+   "file": "words_N2.json",
+   "sha": "a1006d0806"
+  },
+  "N3": {
+   "count": 2218,
+   "file": "words_N3.json",
+   "sha": "2a105827fb"
+  },
+  "N4": {
+   "count": 973,
+   "file": "words_N4.json",
+   "sha": "e6b21d7b37"
+  },
+  "N5": {
+   "count": 375,
+   "file": "words_N5.json",
+   "sha": "72a181887a"
+  },
+  "X": {
+   "count": 103,
+   "file": "words_X.json",
+   "sha": "a668f1e945"
+  }
+ }
 }
