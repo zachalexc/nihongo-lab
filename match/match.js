@@ -4,7 +4,7 @@
     'use strict';
 
     const C = window.MatchCore, S = window.MatchStore, Y = window.MatchSync, CLOUD = window.MatchCloud;
-    const APP_VERSION = '1.6';
+    const APP_VERSION = '1.7';
     const DECKS = {
         'kanji-meaning': { files: 'levels', front: 'kanji', back: 'meaning', items: ['kanji', 'kanji'] },
         'word-reading': { files: 'words', front: 'word', back: 'reading', items: ['word', 'words'] },
@@ -12,6 +12,7 @@
         'word-kanji': { files: 'words', front: 'word', back: 'reading', items: ['word', 'words'], build: C.kanjiCards },
     };
     DECKS['kanji-readings'] = { files: 'readings', front: 'kanji', back: 'readings', items: ['kanji', 'kanji'] };   // R7 deck A
+    DECKS['word-lookalike'] = { files: 'lookalikes', front: 'word', back: 'meaning', items: ['word', 'words'] };   // R10 deck D
     const isWordDeck = d => d === 'word-reading' || d === 'word-kanji';
     const LEVEL_NAMES = { N5: 'N5', N4: 'N4', N3: 'N3', N2: 'N2', N1: 'N1', X: 'Extras' };
     const DEFAULTS = { deck: 'kanji-meaning', level: 'N5', includeEasier: false, keepGoing: true, played: null, size: 12, showTimer: true, vibrate: true, wholeWord: false,
@@ -22,7 +23,7 @@
     const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
     const app = {
-        meta: null, synIdx: null, levels: { 'kanji-meaning': {}, 'word-reading': {}, 'word-kanji': {}, 'kanji-readings': {} }, byId: new Map(),
+        meta: null, synIdx: null, levels: { 'kanji-meaning': {}, 'word-reading': {}, 'word-kanji': {}, 'kanji-readings': {}, 'word-lookalike': {} }, byId: new Map(),
         span: [], inPlay: { levels: [], added: [] }, pool: [], reviewPool: [],
         store: null, saved: null, settings: Object.assign({}, DEFAULTS),
         recent: [], board: null, boardCount: 0, timer: null, lastShown: null,
@@ -34,6 +35,8 @@
     const deck = () => DECKS[app.settings.deck] ? app.settings.deck : 'kanji-meaning';
     const D = () => DECKS[deck()];
     const isWord = it => it.id.startsWith('w:') || it.id.startsWith('h:');
+    const isLook = it => it.id.startsWith('d:');                // deck D: word ↔ meaning
+    const wordFront = it => isWord(it) || isLook(it);
     // Words: deck B (one kanji highlighted) unless "Whole word" is on (deck C)
     const wordDeck = () => (app.settings.wholeWord ? 'word-reading' : 'word-kanji');
     // A span with part of the text marked (deck B: the target kanji / its part of the reading).
@@ -53,9 +56,9 @@
     const glossText = it => it.gloss + (it.gloss2 ? ', ' + it.gloss2 : '');
     const isReading = it => it.id.startsWith('r:');
     const jaBack = it => isWord(it) || isReading(it);           // answer card text is Japanese
-    const backText = it => isWord(it) ? it.r : isReading(it) ? it.rd.join(' · ') : glossText(it);
+    const backText = it => isWord(it) ? it.r : isReading(it) ? it.rd.join(' · ') : isLook(it) ? it.g : glossText(it);
     const playingText = () => app.inPlay.levels.length ? C.playingLabel(app.inPlay, LEVEL_NAMES) : LEVEL_NAMES[app.settings.level];
-    const deckPrefix = () => (isWordDeck(deck()) ? 'Words ' : deck() === 'kanji-readings' ? 'Readings ' : '');
+    const deckPrefix = () => (isWordDeck(deck()) ? 'Words ' : deck() === 'kanji-readings' ? 'Readings ' : deck() === 'word-lookalike' ? 'Look-alikes ' : '');
     const choiceName = () => deckPrefix() + playingText();
     // PC keyboard layout (decision 9): both sides the same grid, key letters on the cards.
     const KEY_LAYOUT = '(hover: hover) and (pointer: fine) and (min-width: 700px)';
@@ -496,7 +499,7 @@
         pool = mode === 'review' ? app.reviewPool : app.pool;
         const seed = TEST_SEED !== null ? TEST_SEED + app.boardCount : ((Date.now() ^ (Math.random() * 4294967296)) >>> 0);
         const b = C.buildBoard({ pool, states: items(), confusions: confusions(), size: app.settings.size, mode,
-                                 recent: app.recent, today: today(), seed, synIdx: app.synIdx, affinity: deck() === 'word-kanji' });
+                                 recent: app.recent, today: today(), seed, synIdx: app.synIdx, affinity: deck() === 'word-kanji', lookalike: deck() === 'word-lookalike' });
         if (b.empty) {
             $('review-hint').textContent = "You've reviewed everything that's due for now. Play a board instead.";
             return;
@@ -536,11 +539,11 @@
         layoutZones();
         b.kanjiOrder.forEach(id => {
             const it = app.byId.get(id);
-            const c = el('button', 'card k' + (isWord(it) ? ' word' : '')); c.type = 'button';
+            const c = el('button', 'card k' + (wordFront(it) ? ' word' : '')); c.type = 'button';
             c.dataset.id = id; c.dataset.kind = 'k';
-            c.setAttribute('aria-label', (isWord(it) ? 'word ' : 'kanji ') + it.k + (it.t ? `, highlighted ${it.t}` : '')); c.setAttribute('aria-pressed', 'false');
+            c.setAttribute('aria-label', (wordFront(it) ? 'word ' : 'kanji ') + it.k + (it.t ? `, highlighted ${it.t}` : '')); c.setAttribute('aria-pressed', 'false');
             c.appendChild(marked('glyph', it.k, it.hk, true));
-            if (isWord(it)) c.style.setProperty('--len', Math.max(2, [...it.k].length));
+            if (wordFront(it)) c.style.setProperty('--len', Math.max(2, [...it.k].length));
             zk.appendChild(c);
         });
         const km = C.keyMap(b.kanjiOrder.length);
@@ -654,6 +657,7 @@
         const p = $('learn'); p.textContent = '';
         if (isWord(it)) { showLearnWord(it, p); return; }
         if (isReading(it)) { showLearnReadings(it, p); return; }
+        if (isLook(it)) { showLearnLook(it, p); return; }
         const lp = el('div', 'lp');
         const tile = el('div', 'lp-tile', it.k); tile.lang = 'ja'; lp.appendChild(tile);
         lp.appendChild(el('div', 'lp-gloss', glossText(it)));
@@ -722,6 +726,41 @@
             lp.appendChild(ul);
         }
         lp.appendChild(el('div', 'lp-meta', `${LEVEL_NAMES[it.lv]} kanji, ${plural(it.strokes, 'stroke')}`));
+        p.appendChild(lp);
+        p.scrollTop = 0;
+    }
+
+    // Deck D: the word, reading, meaning, and the words it looks like (on this board first, else from the pool).
+    function showLearnLook(it, p) {
+        const lp = el('div', 'lp');
+        const tile = el('div', 'lp-tile word', it.k); tile.lang = 'ja'; lp.appendChild(tile);
+        const rd = el('div', 'lp-gloss', it.r); rd.lang = 'ja'; lp.appendChild(rd);
+        lp.appendChild(el('div', 'lp-more', it.gloss));
+        const onBoard = (app.board && app.board.ids || []).map(id => app.byId.get(id)).filter(Boolean);
+        const pool = app.pool || [];
+        const seen = new Set(), rows = [];
+        it.lp.forEach(k => {
+            const o = onBoard.find(x => x.id !== it.id && x.kanji.includes(k)) || pool.find(x => x.id !== it.id && x.kanji.includes(k));
+            if (o && !seen.has(o.id)) { seen.add(o.id); rows.push(o); }
+        });
+        onBoard.forEach(o => { if (!seen.has(o.id) && C.lookNeighbours(it, o)) { seen.add(o.id); rows.unshift(o); } });
+        if (rows.length) {
+            const ul = el('ul', 'lp-ex');
+            lp.appendChild(el('div', 'lp-mix', 'Looks like'));
+            rows.slice(0, 4).forEach(o => {
+                const li = el('li');
+                const ws = el('span', 'w', o.k); ws.lang = 'ja';
+                const rs = el('span', 'rd', o.r); rs.lang = 'ja';
+                li.append(ws, rs, document.createTextNode(o.g));
+                ul.appendChild(li);
+            });
+            lp.appendChild(ul);
+        } else if (it.lp.length) {
+            const m = el('div', 'lp-mix', 'Looks like ' + it.lp.join(' ')); m.lang = 'ja'; lp.appendChild(m);
+        }
+        const partners = C.partnersOf(confusions(), it.id).map(pid => app.byId.get(pid)).filter(Boolean);
+        if (partners.length) lp.appendChild(el('div', 'lp-mix', 'Easy to mix up with ' + partners.map(o => `${o.k} (${o.g})`).join(', ')));
+        lp.appendChild(el('div', 'lp-meta', `${LEVEL_NAMES[it.lv]} word (its hardest kanji is ${LEVEL_NAMES[it.lv]})`));
         p.appendChild(lp);
         p.scrollTop = 0;
     }
@@ -823,7 +862,7 @@
             again.forEach(g => {
                 const it = app.byId.get(g.id);
                 const bt = el('button'); bt.type = 'button';
-                bt.append(marked('k', it.k, it.hk, true), marked('m', isReading(it) ? backText(it) : isWord(it) ? it.r : it.gloss, it.hr, jaBack(it)));
+                bt.append(marked('k', it.k, it.hk, true), marked('m', isReading(it) || isLook(it) ? backText(it) : isWord(it) ? it.r : it.gloss, it.hr, jaBack(it)));
                 bt.setAttribute('aria-label', `Show ${it.k}, ${backText(it)}`);
                 bt.addEventListener('click', () => { showLearn(g.id); $('learn').classList.add('open'); });
                 box.appendChild(bt);

@@ -10,12 +10,15 @@ node --test match\tests\core.test.js match\tests\store.test.js match\tests\sim.t
 ```
 
 Needs Python 3 with `openpyxl`. The first run downloads KANJIDIC2 (≈ 1.3 MB) from GitHub into
-`tools\cache\` (not committed).
+`tools\cache\` (not committed), and KRADFILE (`kradzip.zip`, ≈ 290 KB, from
+https://www.edrdg.org/pub/Nihongo/kradzip.zip, sha256 `e2df44c07ed557fe9867709a051f1f134cd33c750598112d85ba56eb86fc3c8c`)
+for the Look-alikes cards. Both are EDRDG data under CC BY-SA 4.0.
 
 | File | What it is |
 |---|---|
 | `gloss_overrides.tsv` | hand-picked card text: `kanji<TAB>card text<TAB>second meaning (optional)` |
 | `synonyms.tsv` | English words that mean nearly the same; such cards never share a board |
+| `lookalikes.tsv` | look-alike kanji fixes for the Look-alikes cards: `+` adds a pair, `-` removes one |
 | `names_extras.txt` | N1-sheet kanji that aren't on the usual N1 list → the "Extras" level |
 | `out\gloss_review_N5_N4.tsv` | every N5–N4 card text with the alternatives, for review (open in Excel) |
 | `out\build_report.txt` | what the build changed, skipped or added |

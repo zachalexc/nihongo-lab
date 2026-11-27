@@ -6,13 +6,14 @@
   JMdict_e.gz             fallback example words (common entries only)
   KANJIDIC2 (JSON)        meanings and readings, from the scriptin/jmdict-simplified release below
   jlpt_words.json         words and readings for the Words cards (read only; Endless's file)
-  tools/gloss_overrides.tsv, tools/synonyms.tsv, tools/names_extras.txt
+  KRADFILE (+ KRADFILE2)  kanji components, for the Look-alikes cards (EDRDG kradzip.zip)
+  tools/gloss_overrides.tsv, tools/synonyms.tsv, tools/names_extras.txt, tools/lookalikes.tsv
 
 Usage (from the repo folder):
   python match/tools/build_match_data.py            build data + review file + report
   python match/tools/build_match_data.py --check    build into a temp folder and only run the checks
 
-KANJIDIC2 and JMdict are (c) the Electronic Dictionary Research and Development Group (EDRDG),
+KANJIDIC2, KRADFILE and JMdict are (c) the Electronic Dictionary Research and Development Group (EDRDG),
 used under the Creative Commons Attribution-ShareAlike 4.0 licence. The generated data files are
 shared under the same licence (see match/DATA_LICENSE.md).
 """
@@ -23,6 +24,8 @@ from datetime import date
 KANJIDIC_RELEASE = "3.6.2+20261116213322"
 KANJIDIC_ZIP = f"kanjidic2-en-{KANJIDIC_RELEASE}.json.zip"
 KANJIDIC_URL = f"https://github.com/scriptin/jmdict-simplified/releases/download/{KANJIDIC_RELEASE}/{KANJIDIC_ZIP}"
+
+KRAD_URL = "https://www.edrdg.org/pub/Nihongo/kradzip.zip"
 
 LEVELS = ["N5", "N4", "N3", "N2", "N1", "X"]          # X = Extras (N1-sheet kanji not on the usual N1 list)
 DIFF = {lv: i for i, lv in enumerate(LEVELS)}          # 0 = easiest
@@ -350,6 +353,135 @@ def build_readings(items_by_level, kd, use, report, errors):
     return out
 
 
+# ---------------------------------------------------------------- deck D: look-alike words (R10)
+LA_CUT, LA_GAP_COST, LA_CONTAIN_GAP = 0.5, 0.05, 1     # decision 22
+
+
+def load_krad(cache):
+    """KRADFILE + KRADFILE2 (EUC-JP): {kanji: set of components}, and the zip's sha256."""
+    path = os.path.join(cache, "kradzip.zip")
+    if not os.path.exists(path):
+        print(f"Downloading {KRAD_URL}")
+        os.makedirs(cache, exist_ok=True)
+        urllib.request.urlretrieve(KRAD_URL, path)
+    raw = open(path, "rb").read()
+    out = {}
+    with zipfile.ZipFile(io.BytesIO(raw)) as z:
+        for name in ("kradfile", "kradfile2"):
+            for line in z.read(name).decode("euc_jp").splitlines():
+                if line.startswith("#") or " : " not in line:
+                    continue
+                k, _, comps = line.partition(" : ")
+                out.setdefault(k.strip(), set(comps.split()))
+    return out, hashlib.sha256(raw).hexdigest()
+
+
+def la_score(a, b, krad, kd):
+    A, B = krad[a], krad[b]
+    return len(A & B) / len(A | B) - LA_GAP_COST * abs(kd[a]["strokes"] - kd[b]["strokes"])
+
+
+def la_contains(a, b, krad, kd):
+    A, B = krad[a], krad[b]
+    return (A <= B or B <= A) and abs(kd[a]["strokes"] - kd[b]["strokes"]) <= LA_CONTAIN_GAP
+
+
+def lookalike_pairs(level_of, kd, krad, report, errors):
+    """{kanji: set of look-alike kanji}: score >= LA_CUT, or containment, then lookalikes.tsv (+ / -)."""
+    ks = sorted(level_of)
+    miss = [k for k in ks if k not in krad]
+    if miss:
+        errors.append(f"{len(miss)} kanji missing from KRADFILE: {''.join(miss[:30])}")
+        return {}
+    by_comp = collections.defaultdict(set)
+    for k in ks:
+        for c in krad[k]:
+            by_comp[c].add(k)
+    src = {}
+    for a in ks:
+        for b in sorted(set().union(*(by_comp[c] for c in krad[a]))):
+            if b <= a:
+                continue
+            if la_score(a, b, krad, kd) >= LA_CUT:
+                src[(a, b)] = "score"
+            elif la_contains(a, b, krad, kd):
+                src[(a, b)] = "containment"
+    for row in load_tsv("lookalikes.tsv"):
+        op, a, b = row[0].strip(), row[1].strip(), row[2].strip()
+        if a not in level_of or b not in level_of:
+            report["Look-alikes: tsv lines with a kanji not in the data (skipped)"].append("\t".join(row[:3]))
+            continue
+        key = tuple(sorted((a, b)))
+        if op == "+":
+            src[key] = src.get(key) and src[key] + "+tsv" or "tsv"
+        elif op == "-":
+            if key not in src:
+                report["Look-alikes: tsv '-' lines for pairs the rule doesn't find"].append(a + b)
+            src.pop(key, None)
+        else:
+            errors.append(f"lookalikes.tsv: bad line {row}")
+    easy = lambda p: all(DIFF[level_of[k]] <= DIFF["N3"] for k in p)
+    cnt = collections.Counter(v for p, v in src.items() if easy(p))
+    report["Look-alikes: pairs at N5–N3 by source"] = [f"{k}: {v}" for k, v in sorted(cnt.items())] + [
+        f"removed by tsv: {sum(1 for r in load_tsv('lookalikes.tsv') if r[0].strip() == '-')} lines",
+        f"all levels: {len(src)} pairs"]
+    report["Look-alikes: containment pairs at N5–N3"] = [" ".join(a + b for (a, b), v in sorted(src.items())
+                                                                  if v == "containment" and easy((a, b)))]
+    partners = collections.defaultdict(set)
+    for a, b in src:
+        partners[a].add(b); partners[b].add(a)
+    return partners
+
+
+def card_gloss(g):
+    """Card text for a word's gloss: its first meaning, trimmed like the meaning cards."""
+    first = g.split(";")[0].strip()
+    if len(first) > MAX_GLOSS and "," in first:
+        first = first.split(",")[0].strip()
+    return first
+
+
+def build_lookalikes(words_by_level, level_of, partners, report, errors):
+    out = {}
+    for lv, words in words_by_level.items():
+        out[lv] = []
+        for w in words:
+            own = set(w["kanji"])
+            lp = sorted({p for k in own for p in partners.get(k, ())
+                         if p not in own and DIFF[level_of[p]] <= DIFF[lv]})        # decision 24
+            if not lp:
+                continue
+            lk = sorted(k for k in own if any(p in lp for p in partners.get(k, ())))
+            g = card_gloss(w["gloss"])
+            keys = sorted(set([norm(x) for x in w["gloss"].split(";") if x.strip()] + [norm(g), "#" + w["k"]]))
+            out[lv].append(dict(
+                id="d:" + w["k"] + "|" + w["r"], wid=w["id"], k=w["k"], r=w["r"], gloss=w["gloss"], g=g, lv=lv,
+                kanji=w["kanji"], lk=lk, lp=lp, freq=w["freq"], strokes=w["strokes"],
+                shown=[norm(g), "#" + w["k"]], keys=keys))
+        report["Look-alikes: cards per level"].append(f"{lv}: {len(out[lv])}")
+        if any(not x["g"] for x in out[lv]):
+            errors.append(f"{lv}: Look-alikes card with an empty meaning")
+    # gloss pairs with high token overlap that don't clash yet (candidates for synonyms.tsv)
+    stop = {"a", "an", "the", "to", "of", "be", "in", "on", "one", "s", "for", "with", "and", "or", "as"}
+    toks = lambda t: set(re.findall(r"[a-z]+", t)) - stop
+    cand = []
+    for lv, items in out.items():
+        tk = [(it, toks(it["shown"][0])) for it in items]
+        for i, (a, ta) in enumerate(tk):
+            if not ta:
+                continue
+            for b, tb in tk[i + 1:]:
+                if not tb or a["shown"][0] in b["keys"] or b["shown"][0] in a["keys"]:
+                    continue
+                j = len(ta & tb) / len(ta | tb)
+                if j >= 0.5:
+                    cand.append((j, lv, a, b))
+    cand.sort(key=lambda x: (-x[0], x[1], x[2]["id"], x[3]["id"]))
+    report["Look-alikes: gloss pairs with high token overlap (not clashing; top 20 of %d)" % len(cand)] = [
+        f"{lv} {a['k']} \"{a['g']}\" ~ {b['k']} \"{b['g']}\" ({j:.2f})" for j, lv, a, b in cand[:20]]
+    return out
+
+
 def build(repo, out_dir, review_dir):
     report = collections.defaultdict(list)
     levels = load_levels(repo)
@@ -476,7 +608,8 @@ def build(repo, out_dir, review_dir):
             f.write(text + "\n")
         files[lv] = dict(count=len(items), file=fn, sha=hashlib.sha256(text.encode()).hexdigest()[:10])
     wfiles = {}
-    for lv, items in build_words(repo, level_of, report, errors).items():
+    words_by = build_words(repo, level_of, report, errors)
+    for lv, items in words_by.items():
         doc = dict(schema=1, deck="word-reading", level=lv, items=items)
         text = json.dumps(doc, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
         fn = f"words_{lv}.json"
@@ -494,16 +627,30 @@ def build(repo, out_dir, review_dir):
         with open(os.path.join(out_dir, fn), "w", encoding="utf-8", newline="\n") as f:
             f.write(text + "\n")
         rfiles[lv] = dict(count=len(items), file=fn, sha=hashlib.sha256(text.encode()).hexdigest()[:10])
-    shas = [v["sha"] for v in files.values()] + [v["sha"] for v in wfiles.values()] + [v["sha"] for v in rfiles.values()]
+    krad, krad_sha = load_krad(os.path.join(HERE, "cache"))
+    report["Look-alikes: KRADFILE (kradzip.zip) sha256"].append(krad_sha)
+    partners = lookalike_pairs(level_of, kd, krad, report, errors)
+    lfiles = {}
+    for lv, items in build_lookalikes(words_by, level_of, partners, report, errors).items():
+        doc = dict(schema=1, deck="word-lookalike", level=lv, items=items)
+        text = json.dumps(doc, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        fn = f"lookalike_{lv}.json"
+        with open(os.path.join(out_dir, fn), "w", encoding="utf-8", newline="\n") as f:
+            f.write(text + "\n")
+        lfiles[lv] = dict(count=len(items), file=fn, sha=hashlib.sha256(text.encode()).hexdigest()[:10])
+    shas = [v["sha"] for v in files.values()] + [v["sha"] for v in wfiles.values()] + [v["sha"] for v in rfiles.values()] \
+        + [v["sha"] for v in lfiles.values()]
     build_id = hashlib.sha256("".join(shas).encode()).hexdigest()[:8]
     meta = dict(
         schema=1, build=build_id, built=date.today().isoformat(),
-        levels=files, words=wfiles, readings=rfiles,
+        levels=files, words=wfiles, readings=rfiles, lookalikes=lfiles,
         levelNames={"N5": "N5", "N4": "N4", "N3": "N3", "N2": "N2", "N1": "N1", "X": "Extras"},
         synonyms=synonyms,
         sources=dict(
             kanjidic2=dict(release=KANJIDIC_RELEASE, dictDate=dict_date, version=kd_version,
                            licence="CC BY-SA 4.0, EDRDG"),
+            kradfile=dict(file="kradzip.zip", url=KRAD_URL, sha256=krad_sha, use="look-alike kanji (word-lookalike)",
+                          licence="CC BY-SA 4.0, EDRDG"),
             jmdict=dict(file="JMdict_e.gz", use="fallback example words", licence="CC BY-SA 4.0, EDRDG"),
             lists="kanji_list.xlsx; n5.txt–n1.txt",
             words="jlpt_words.json (Nihongo Lab, CC BY-SA 4.0), decks word-reading and word-kanji; reading use for kanji-readings"))

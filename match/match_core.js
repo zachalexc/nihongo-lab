@@ -37,7 +37,9 @@
         NEW_QUOTA_FEW: 1,             // new kanji per board when the backlog is large ...
         BACKLOG_LARGE: 2,             // ... i.e. at least N * this weak kanji (in between: WEAK_QUOTA)
         MIN_BOARD: 3,                 // smallest board when the pool is tiny
-        AFFINITY_LOOKAHEAD: 30,       // deck B: how far down the list to look for a word sharing a kanji
+        AFFINITY_LOOKAHEAD: 30,
+        LOOKALIKE_GROUP_FULL: 4,      // deck D (R10): most words in one look-alike group on a 12 board
+        LOOKALIKE_GROUP_QUICK: 3,     // … and on a 6 board       // deck B: how far down the list to look for a word sharing a kanji
 
         // Trouble list on Home
         TROUBLE_LAPSES: 3,            // fell back to weak this many times, or ...
@@ -120,6 +122,19 @@
             }
         }
         return out;
+    }
+
+    // ------------------------------------------------------------------ deck D: look-alike words (R10)
+    // Two cards are neighbours if a kanji of one is a look-alike partner (lp) of a kanji of the other.
+    function lookNeighbours(a, b) {
+        if (!a || !b || a.id === b.id) return false;
+        const ak = a.kanji || [], bk = b.kanji || [];
+        return (a.lp || []).some(k => bk.includes(k)) || (b.lp || []).some(k => ak.includes(k));
+    }
+    // How many cards of a board have a look-alike neighbour on the same board.
+    function groupShare(ids, byId) {
+        const its = ids.map(id => byId.get(id));
+        return its.filter(a => its.some(b => lookNeighbours(a, b))).length;
     }
 
     // ------------------------------------------------------------------ study days
@@ -361,9 +376,37 @@
 
         const chosen = [], parts = { weak: 0, review: 0, new: 0, fill: 0 };
         const fits = id => byId.has(id) && !chosen.includes(id) && chosen.every(c => !clash(byId.get(c), byId.get(id), synIdx));
+        // opts.lookalike (deck D): each card added pulls in its look-alike neighbours (due and weak first,
+        // then new by frequency, then the rest), up to a group of LOOKALIKE_GROUP_* cards.
+        const G = opts.lookalike ? (N <= 6 ? T.LOOKALIKE_GROUP_QUICK : T.LOOKALIKE_GROUP_FULL) : 0;
+        let nbIdx = null, rankOf = null;
+        function neighbours(id) {
+            if (!nbIdx) {
+                nbIdx = { has: new Map(), lp: new Map() };
+                const put = (m, k, v) => { if (!m.has(k)) m.set(k, []); m.get(k).push(v); };
+                opts.pool.forEach(it => { (it.kanji || []).forEach(k => put(nbIdx.has, k, it.id)); (it.lp || []).forEach(k => put(nbIdx.lp, k, it.id)); });
+                rankOf = new Map();
+                [].concat(due, weakAll.slice().sort(weakSort), fresh, known).forEach((x, i) => { if (!rankOf.has(x)) rankOf.set(x, i); });
+            }
+            const a = byId.get(id), out = new Set();
+            (a.lp || []).forEach(k => (nbIdx.has.get(k) || []).forEach(x => out.add(x)));
+            (a.kanji || []).forEach(k => (nbIdx.lp.get(k) || []).forEach(x => out.add(x)));
+            out.delete(id);
+            const r = x => (last1.has(x) ? 1e7 : 0) + (rankOf.has(x) ? rankOf.get(x) : 1e6);
+            return [...out].sort((x, y) => r(x) - r(y) || (x < y ? -1 : 1));
+        }
+        function addGroup(id, part) {
+            const a = byId.get(id);
+            let group = 1 + chosen.filter(c => c !== id && lookNeighbours(a, byId.get(c))).length;
+            for (const x of neighbours(id)) {
+                if (group >= G || chosen.length >= N) break;
+                if (fits(x)) { chosen.push(x); parts[part]++; group++; }
+            }
+        }
         function add(id, part) {
             if (chosen.length >= N || !fits(id)) return false;
             chosen.push(id); parts[part]++;
+            if (G) addGroup(id, part);
             for (const p of partnersOf(conf, id)) if (chosen.length < N && fits(p)) { chosen.push(p); parts[part]++; }
             return true;
         }
@@ -528,7 +571,7 @@
         norm, synonymIndex, clash,
         studyDay, addDays, dayDiff, rng, shuffle,
         band, isDue, isTrouble, gradeBoard, applyGrade,
-        pairKey, pairOf, oldPair, repairConfusions, splitParts, kanjiCards, isActive, partnersOf, updateConfusions, applyBoard,
+        pairKey, pairOf, oldPair, repairConfusions, splitParts, kanjiCards, lookNeighbours, groupShare, isActive, partnersOf, updateConfusions, applyBoard,
         buildBoard, bestKey, isBetter, firstTry, poolLevels,
         nextLevel, fullySeen, poolFor, levelsInPlay, playingLabel,
         SIZES, normSize, KEY_ROWS, keyLabel, keyCols, keyMap, keyTarget, keyAllowed,

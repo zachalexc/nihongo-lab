@@ -21,7 +21,7 @@
 
     const V = 1;
     const MAX_CHARS = 900000;                    // firestore.rules caps d.size() at this
-    const DECKS = ['kanji-meaning', 'word-reading', 'word-kanji', 'kanji-readings'];
+    const DECKS = ['kanji-meaning', 'word-reading', 'word-kanji', 'kanji-readings', 'word-lookalike'];
     // R6: deck B (word-kanji, 11,080 cards) is split over two docs, deck-word-kanji and deck-word-kanji-b,
     // so a fully seen deck stays far below Firestore's 1 MiB doc limit (Japanese ids are 3 bytes a character).
     const SHARDS = { 'word-kanji': 2 };

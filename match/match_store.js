@@ -19,7 +19,7 @@
     const SCHEMA = 1;
     const FORMAT = 'nihongo-match-export';
     const LOG_KEEP = 300;          // finished boards kept in the history log
-    const DECKS = ['kanji-meaning', 'word-reading', 'word-kanji', 'kanji-readings'];
+    const DECKS = ['kanji-meaning', 'word-reading', 'word-kanji', 'kanji-readings', 'word-lookalike'];
 
     function uuid() {
         if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();

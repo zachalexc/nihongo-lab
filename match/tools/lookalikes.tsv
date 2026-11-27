@@ -1,0 +1,64 @@
+# Look-alike kanji corrections (Kanji Match deck D, decision 22).
+# +<TAB>kanji<TAB>kanji<TAB>note   adds a pair the KRADFILE rule can't see
+# -<TAB>kanji<TAB>kanji<TAB>note   removes a pair the rule finds but that doesn't look alike
++	土	士	one component each
++	人	入	one component each
++	日	目	one component each
++	自	白	one component each
++	問	間	門 + 口/日
++	問	聞	門
++	間	聞	門
++	入	八	shape
++	千	干	shape
++	午	牛	shape
++	刀	力	shape
++	貝	見	shape
++	特	持	土寸
++	特	待	土寸
++	晴	清	青
+-	上	与	containment / score, looks different
+-	下	与	
+-	下	万	
+-	万	不	
+-	万	在	
+-	万	存	
+-	万	才	
+-	国	主	
+-	国	注	
+-	何	事	
+-	事	可	
+-	事	争	
+-	事	君	
+-	東	押	
+-	東	便	
+-	東	昔	
+-	右	使	
+-	重	昨	
+-	重	便	
+-	昨	便	
+-	曲	昨	
+-	便	更	
+-	働	便	
+-	員	負	
+-	悪	師	
+-	起	徒	
+-	写	号	
+-	冬	処	
+-	戦	単	
+-	神	押	
+-	由	押	
+-	申	押	
+-	共	昔	
+-	供	昔	
+-	側	貧	
+-	敗	貧	
+-	院	完	
+-	室	到	
+-	屋	到	
+-	名	多	
+-	本	体	
+-	外	多	containment rule
+-	多	死	containment rule
+-	六	末	containment rule
+-	六	未	containment rule
+-	追	速	containment rule

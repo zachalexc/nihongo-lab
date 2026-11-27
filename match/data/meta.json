@@ -1,5 +1,5 @@
 {
- "build": "e2b8a604",
+ "build": "1ed4e5db",
  "built": "2026-11-26",
  "levelNames": {
   "N1": "N1",
@@ -39,6 +39,38 @@
    "count": 151,
    "file": "kanji_X.json",
    "sha": "fa9e1638e1"
+  }
+ },
+ "lookalikes": {
+  "N1": {
+   "count": 1313,
+   "file": "lookalike_N1.json",
+   "sha": "734a87bb3b"
+  },
+  "N2": {
+   "count": 869,
+   "file": "lookalike_N2.json",
+   "sha": "6f70d40c33"
+  },
+  "N3": {
+   "count": 1118,
+   "file": "lookalike_N3.json",
+   "sha": "285110a001"
+  },
+  "N4": {
+   "count": 376,
+   "file": "lookalike_N4.json",
+   "sha": "c7329e4b9e"
+  },
+  "N5": {
+   "count": 136,
+   "file": "lookalike_N5.json",
+   "sha": "a2afb64a17"
+  },
+  "X": {
+   "count": 70,
+   "file": "lookalike_X.json",
+   "sha": "f0c0f56ad7"
   }
  },
  "readings": {
@@ -85,6 +117,13 @@
    "licence": "CC BY-SA 4.0, EDRDG",
    "release": "3.6.2+20261116213322",
    "version": "3.6.2"
+  },
+  "kradfile": {
+   "file": "kradzip.zip",
+   "licence": "CC BY-SA 4.0, EDRDG",
+   "sha256": "e2df44c07ed557fe9867709a051f1f134cd33c750598112d85ba56eb86fc3c8c",
+   "url": "https://www.edrdg.org/pub/Nihongo/kradzip.zip",
+   "use": "look-alike kanji (word-lookalike)"
   },
   "lists": "kanji_list.xlsx; n5.txt–n1.txt",
   "words": "jlpt_words.json (Nihongo Lab, CC BY-SA 4.0), decks word-reading and word-kanji; reading use for kanji-readings"

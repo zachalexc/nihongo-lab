@@ -7,6 +7,8 @@ conformance with the Group's licence: the
 [Creative Commons Attribution-ShareAlike 4.0 International licence](https://creativecommons.org/licenses/by-sa/4.0/).
 KANJIDIC2 was taken in JSON form from [scriptin/jmdict-simplified](https://github.com/scriptin/jmdict-simplified)
 (release noted in `data/meta.json`).
+The look-alike kanji pairs in `lookalike_*.json` use the component lists of **KRADFILE** and **KRADFILE2**
+(EDRDG, same licence), from https://www.edrdg.org/pub/Nihongo/kradzip.zip (sha256 noted in `data/meta.json`).
 
 The files in `match/data/` are therefore shared under the same licence, CC BY-SA 4.0.
 Card meanings were chosen with the help of the Nihongo Lab vocabulary lists and a hand-written list of
