@@ -73,6 +73,7 @@
     // or their card texts are in the same synonym group.
     function clash(a, b, synIdx) {
         if (a.id === b.id) return true;
+        if (a.lm != null && b.lm != null && lookMeaningClash(a.lm, b.lm)) return true;   // deck D, decision 28
         const bk = new Set(b.keys), ak = new Set(a.keys);
         if (a.shown.some(x => bk.has(x)) || b.shown.some(x => ak.has(x))) return true;
         if (synIdx) {
@@ -125,6 +126,14 @@
     }
 
     // ------------------------------------------------------------------ deck D: look-alike words (R10)
+    // R11 decision 28: Look-alikes meanings (already normalised in the data as lm) clash when equal,
+    // or when all the words of one appear in the other.
+    function lookMeaningClash(x, y) {
+        if (x === y) return true;
+        const X = x.split(' ').filter(Boolean), Y = new Set(y.split(' ').filter(Boolean)), Xs = new Set(X);
+        if (!X.length || !Y.size) return false;
+        return X.every(w => Y.has(w)) || [...Y].every(w => Xs.has(w));
+    }
     // Two cards are neighbours if a kanji of one is a look-alike partner (lp) of a kanji of the other.
     function lookNeighbours(a, b) {
         if (!a || !b || a.id === b.id) return false;
@@ -571,7 +580,7 @@
         norm, synonymIndex, clash,
         studyDay, addDays, dayDiff, rng, shuffle,
         band, isDue, isTrouble, gradeBoard, applyGrade,
-        pairKey, pairOf, oldPair, repairConfusions, splitParts, kanjiCards, lookNeighbours, groupShare, isActive, partnersOf, updateConfusions, applyBoard,
+        pairKey, pairOf, oldPair, repairConfusions, splitParts, kanjiCards, lookNeighbours, groupShare, lookMeaningClash, isActive, partnersOf, updateConfusions, applyBoard,
         buildBoard, bestKey, isBetter, firstTry, poolLevels,
         nextLevel, fullySeen, poolFor, levelsInPlay, playingLabel,
         SIZES, normSize, KEY_ROWS, keyLabel, keyCols, keyMap, keyTarget, keyAllowed,

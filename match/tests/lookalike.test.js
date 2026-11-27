@@ -107,3 +107,24 @@ test('Look-alikes progress is its own deck: saved, exported and synced as deck-w
     const back = Y.unpack({ 'deck-word-lookalike': { v: 1, mt: 1, d: doc } });
     assert.equal(Object.keys(back.items['word-lookalike']).length, all.length);
 });
+
+// R11 decisions 27–28
+test('decision 27: card text skips meanings starting with "-" (kept only when all do)', () => {
+    all.forEach(it => {
+        const parts = it.gloss.split(';').map(x => x.trim()).filter(Boolean);
+        if (parts.some(x => !x.startsWith('-'))) assert.ok(!it.g.startsWith('-'), it.id + ' ' + it.g);
+    });
+    const jin = all.find(it => it.id === 'd:人|じん');
+    if (jin) assert.equal(jin.g, '-ian');   // its gloss has only suffix meanings
+});
+
+test('decision 28: Look-alikes near-meaning clash (equal or all words of one in the other)', () => {
+    const lm = new Map(all.map(it => [it.k, it.lm]));
+    for (const [a, b] of [['保健', '保養'], ['慎重', '慎む'], ['挑戦', '挑む'], ['再び', '再三'], ['例', '例えば'], ['旦那', '修士'], ['捜査', '捜す']]) {
+        if (lm.has(a) && lm.has(b)) assert.ok(C.lookMeaningClash(lm.get(a), lm.get(b)), `${a} ${lm.get(a)} / ${b} ${lm.get(b)}`);
+    }
+    assert.ok(!C.lookMeaningClash('hold', 'wait'));
+    const x = { id: 'd:a', shown: ['careful'], keys: ['careful'], lm: 'careful' }, y = { id: 'd:b', shown: ['be careful'], keys: ['be careful'], lm: 'careful' };
+    assert.ok(C.clash(x, y));
+    assert.ok(!C.clash({ id: 'k:a', shown: ['careful'], keys: ['careful'] }, { id: 'k:b', shown: ['be careful'], keys: ['be careful'] }), 'Meaning cards unchanged');
+});

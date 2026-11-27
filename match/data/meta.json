@@ -1,6 +1,6 @@
 {
- "build": "1ed4e5db",
- "built": "2026-11-26",
+ "build": "508fbf79",
+ "built": "2026-11-27",
  "levelNames": {
   "N1": "N1",
   "N2": "N2",
@@ -45,32 +45,32 @@
   "N1": {
    "count": 1313,
    "file": "lookalike_N1.json",
-   "sha": "734a87bb3b"
+   "sha": "123f301149"
   },
   "N2": {
    "count": 869,
    "file": "lookalike_N2.json",
-   "sha": "6f70d40c33"
+   "sha": "ee27cdf5c6"
   },
   "N3": {
    "count": 1118,
    "file": "lookalike_N3.json",
-   "sha": "285110a001"
+   "sha": "6ba51619fe"
   },
   "N4": {
    "count": 376,
    "file": "lookalike_N4.json",
-   "sha": "c7329e4b9e"
+   "sha": "7242c3d2bb"
   },
   "N5": {
    "count": 136,
    "file": "lookalike_N5.json",
-   "sha": "a2afb64a17"
+   "sha": "ff9b22039f"
   },
   "X": {
    "count": 70,
    "file": "lookalike_X.json",
-   "sha": "f0c0f56ad7"
+   "sha": "1fe3525647"
   }
  },
  "readings": {

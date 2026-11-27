@@ -434,11 +434,20 @@ def lookalike_pairs(level_of, kd, krad, report, errors):
 
 
 def card_gloss(g):
-    """Card text for a word's gloss: its first meaning, trimmed like the meaning cards."""
-    first = g.split(";")[0].strip()
+    """Card text for a word's gloss: its first meaning that doesn't start with "-" (decision 27),
+    trimmed like the meaning cards."""
+    parts = [x.strip() for x in g.split(";") if x.strip()]
+    first = next((x for x in parts if not x.startswith("-")), parts[0] if parts else "")
     if len(first) > MAX_GLOSS and "," in first:
         first = first.split(",")[0].strip()
     return first
+
+
+def look_norm(g):
+    """Decision 28: lowercase; drop (…), 's and -; drop a leading "to be " / "to "; trim."""
+    s = re.sub(r"\(.*?\)", "", g.lower()).replace("'s", "").replace("-", "")
+    s = re.sub(r"^\s*(to be |to )", "", s)
+    return re.sub(r"\s+", " ", s).strip()
 
 
 def build_lookalikes(words_by_level, level_of, partners, report, errors):
@@ -457,7 +466,7 @@ def build_lookalikes(words_by_level, level_of, partners, report, errors):
             out[lv].append(dict(
                 id="d:" + w["k"] + "|" + w["r"], wid=w["id"], k=w["k"], r=w["r"], gloss=w["gloss"], g=g, lv=lv,
                 kanji=w["kanji"], lk=lk, lp=lp, freq=w["freq"], strokes=w["strokes"],
-                shown=[norm(g), "#" + w["k"]], keys=keys))
+                shown=[norm(g), "#" + w["k"]], keys=keys, lm=look_norm(g)))
         report["Look-alikes: cards per level"].append(f"{lv}: {len(out[lv])}")
         if any(not x["g"] for x in out[lv]):
             errors.append(f"{lv}: Look-alikes card with an empty meaning")
